@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Show {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  episodes Episode[]
+  speakers Speaker[]
+}
+
+model Episode {
+  id             Int      @id @default(autoincrement())
+  showId         Int
+  season         Int
+  episodeNumber  Int
+  airDate        DateTime?
+  productionCode String    @unique
+  title          String
+  show           Show      @relation(fields: [showId], references: [id])
+  clips          Clip[]
+  quotes         Quote[]
+
+  @@unique([showId, season, episodeNumber])
+}
+
+model Clip {
+  id         Int          @id @default(autoincrement())
+  episodeId  Int
+  filePath   String       // path to converted MP4 file
+  duration   Int?         // seconds
+  startTime  String
+  stopTime   String
+  episode    Episode      @relation(fields: [episodeId], references: [id])
+  quotes     Quote[]
+  speakers   ClipSpeaker[]
+  keywords   String?  // comma-separated for SQLite; migrate to array in Postgres
+}
+
+model Speaker {
+  id             Int           @id @default(autoincrement())
+  showId         Int
+  name           String
+  type           String        @default("RECURRING")
+  show           Show          @relation(fields: [showId], references: [id])
+  quotes         Quote[]
+  clips          ClipSpeaker[]
+
+  @@unique([showId, name])
+}
+
+model Quote {
+  id         Int      @id @default(autoincrement())
+  episodeId  Int
+  clipId     Int
+  speakerId  Int?
+  text       String
+  sequence   Int      // ordering within the clip
+  episode    Episode  @relation(fields: [episodeId], references: [id])
+  clip       Clip     @relation(fields: [clipId], references: [id])
+  speaker    Speaker? @relation(fields: [speakerId], references: [id])
+
+  @@index([clipId, sequence])
+  @@index([speakerId])
+  @@index([episodeId])
+}
+
+model ClipSpeaker {
+  clipId     Int
+  speakerId  Int
+  lineCount  Int     @default(1)
+  clip       Clip    @relation(fields: [clipId], references: [id])
+  speaker    Speaker @relation(fields: [speakerId], references: [id])
+
+  @@id([clipId, speakerId])
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  role      String   @default("GUEST")
+  createdAt DateTime @default(now())
+}
+
