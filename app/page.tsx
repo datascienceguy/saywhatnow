@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import prisma from '@/lib/prisma'
 import SearchForm from './components/SearchForm'
 import SearchResults from './components/SearchResults'
+import GamesMenu from './components/GamesMenu'
 
 interface PageProps {
   searchParams: Promise<{ q?: string; showId?: string; season?: string; episodeId?: string; speakerName?: string; page?: string; limit?: string }>
@@ -32,6 +33,9 @@ export default async function HomePage({ searchParams }: PageProps) {
           <p style={{ color: '#5a3e00', fontSize: '0.85rem', paddingBottom: '0.3rem' }}>
             Search quotes from The Simpsons, Futurama &amp; Scrubs
           </p>
+          <div style={{ marginLeft: 'auto', paddingBottom: '0.3rem' }}>
+            <GamesMenu />
+          </div>
         </div>
       </header>
 

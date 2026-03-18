@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import ClipViewer from '@/app/components/ClipViewer'
 import SpeakerLink from '@/app/components/SpeakerLink'
 import BackButton from '@/app/components/BackButton'
+import GamesMenu from '@/app/components/GamesMenu'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -38,6 +39,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
         <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>
           {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
         </span>
+        <GamesMenu />
         <span style={{ fontSize: '0.75rem', color: '#5a3e00', marginLeft: 'auto' }}>
           {clip.startTime} &ndash; {clip.stopTime}
         </span>

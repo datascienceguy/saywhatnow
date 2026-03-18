@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import BackButton from '@/app/components/BackButton'
+import GamesMenu from '@/app/components/GamesMenu'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -102,6 +103,7 @@ export default async function SpeakerPage({ params }: Props) {
         <Link href="/" style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.5rem', letterSpacing: '0.05em', color: '#1a1a1a', textDecoration: 'none' }}>SayWhatNow</Link>
         <span style={{ color: '#1a1a1a' }}>›</span>
         <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>{speaker.name}</span>
+        <GamesMenu />
         <span style={{ fontSize: '0.8rem', color: '#5a3e00', marginLeft: 'auto' }}>{speaker.show.name}</span>
       </header>
 
