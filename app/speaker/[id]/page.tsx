@@ -27,7 +27,9 @@ export default async function SpeakerPage({ params }: Props) {
       <div style={{ background: 'linear-gradient(180deg, #87CEEB 0%, #B0E0FF 100%)', minHeight: '100vh' }}>
         <header style={{ background: '#FED90F', borderBottom: '4px solid #1a1a1a', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <BackButton />
-          <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.5rem' }}>{speaker.name}</span>
+          <Link href="/" style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.5rem', color: '#1a1a1a', textDecoration: 'none' }}>SayWhatNow</Link>
+          <span style={{ color: '#1a1a1a' }}>›</span>
+          <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem' }}>{speaker.name}</span>
         </header>
         <div style={{ maxWidth: '720px', margin: '2rem auto', padding: '0 1rem' }}>
           <p style={{ color: '#1B4F72' }}>No quotes found for this speaker.</p>
@@ -57,9 +59,6 @@ export default async function SpeakerPage({ params }: Props) {
   for (const q of quotes) seasonCounts[q.episode.season] = (seasonCounts[q.episode.season] ?? 0) + 1
   const mostActiveSeason = Number(Object.entries(seasonCounts).sort((a, b) => b[1] - a[1])[0][0])
   const mostActiveSeasonLines = seasonCounts[mostActiveSeason]
-
-  // Longest quote
-  const longestQuote = quotes.reduce((a, b) => a.text.length > b.text.length ? a : b)
 
   // Most repeated quote
   const textCounts: Record<string, number> = {}
@@ -100,7 +99,9 @@ export default async function SpeakerPage({ params }: Props) {
     <div style={{ background: 'linear-gradient(180deg, #87CEEB 0%, #B0E0FF 100%)', minHeight: '100vh' }}>
       <header style={{ background: '#FED90F', borderBottom: '4px solid #1a1a1a', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <BackButton />
-        <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.5rem', letterSpacing: '0.05em' }}>{speaker.name}</span>
+        <Link href="/" style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.5rem', letterSpacing: '0.05em', color: '#1a1a1a', textDecoration: 'none' }}>SayWhatNow</Link>
+        <span style={{ color: '#1a1a1a' }}>›</span>
+        <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>{speaker.name}</span>
         <span style={{ fontSize: '0.8rem', color: '#5a3e00', marginLeft: 'auto' }}>{speaker.show.name}</span>
       </header>
 
@@ -134,36 +135,31 @@ export default async function SpeakerPage({ params }: Props) {
           {statCard('Most active season', `Season ${mostActiveSeason}`, `${mostActiveSeasonLines.toLocaleString()} lines`)}
         </div>
 
-        {/* Longest quote */}
-        <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Longest Quote</div>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{longestQuote.text}&rdquo;</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
-            S{longestQuote.episode.season}E{longestQuote.episode.episodeNumber} &mdash; {longestQuote.episode.title}
-          </p>
-        </div>
-
         {/* Most repeated quote */}
         {mostRepeatedQuote && (
-          <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-              Most Repeated Quote <span style={{ color: '#bbb', fontWeight: 400 }}>({mostRepeatedCount}×)</span>
+          <Link href={`/clip/${mostRepeatedQuote.clipId}`} style={{ textDecoration: 'none' }}>
+            <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                Most Repeated Quote <span style={{ color: '#bbb', fontWeight: 400 }}>({mostRepeatedCount}×)</span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{mostRepeatedQuote.text}&rdquo;</p>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
+                First in S{mostRepeatedQuote.episode.season}E{mostRepeatedQuote.episode.episodeNumber} &mdash; {mostRepeatedQuote.episode.title}
+              </p>
             </div>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{mostRepeatedQuote.text}&rdquo;</p>
-            <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
-              First in S{mostRepeatedQuote.episode.season}E{mostRepeatedQuote.episode.episodeNumber} &mdash; {mostRepeatedQuote.episode.title}
-            </p>
-          </div>
+          </Link>
         )}
 
         {/* Random quote */}
-        <div style={{ background: '#FFFBCC', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Random Quote</div>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{randomQuote.text}&rdquo;</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
-            S{randomQuote.episode.season}E{randomQuote.episode.episodeNumber} &mdash; {randomQuote.episode.title}
-          </p>
-        </div>
+        <Link href={`/clip/${randomQuote.clipId}`} style={{ textDecoration: 'none' }}>
+          <div style={{ background: '#FFFBCC', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Random Quote</div>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{randomQuote.text}&rdquo;</p>
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
+              S{randomQuote.episode.season}E{randomQuote.episode.episodeNumber} &mdash; {randomQuote.episode.title}
+            </p>
+          </div>
+        </Link>
 
         {/* Co-speakers */}
         {coSpeakers.length > 0 && (
