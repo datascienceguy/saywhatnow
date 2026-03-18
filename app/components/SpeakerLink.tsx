@@ -10,6 +10,7 @@ interface Props {
 export default function SpeakerLink({ id, name, imageUrl, isMatch }: Props) {
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation()
+    e.nativeEvent.stopImmediatePropagation()
     if (id) window.location.href = `/speaker/${id}`
   }
 

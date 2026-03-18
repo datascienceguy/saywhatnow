@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import prisma from '@/lib/prisma'
 import PageSizeSelector from './PageSizeSelector'
 import SpeakerLink from './SpeakerLink'
+import ClickableCard from './ClickableCard'
 
 interface Props {
   q: string
@@ -115,12 +116,7 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
         const visibleQuotes = quotes.filter((_, i) => visibleIndices.has(i))
 
         return (
-          <Link
-            key={clip.id}
-            href={buildClipUrl(clip.id, q, showId, season, episodeId, speakerName)}
-            style={{ textDecoration: 'none', display: 'block' }}
-          >
-            <div style={{ border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: 'white', cursor: 'pointer' }}>
+          <ClickableCard key={clip.id} href={buildClipUrl(clip.id, q, showId, season, episodeId, speakerName)}>
               <div style={{ background: '#FED90F', borderBottom: '2px solid #1a1a1a', padding: '0.4rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a' }}>
                   {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
@@ -156,8 +152,7 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
                   )
                 })}
               </div>
-            </div>
-          </Link>
+          </ClickableCard>
         )
       })}
 

@@ -75,6 +75,19 @@ export default async function SpeakerPage({ params }: Props) {
   // Average words per line
   const avgWords = Math.round(wordCount / quoteCount)
 
+  // Co-speakers
+  type CoSpeaker = { id: number; name: string; imageUrl: string | null; sharedClips: number }
+  const coSpeakers = await prisma.$queryRaw<CoSpeaker[]>`
+    SELECT s.id, s.name, s.imageUrl, COUNT(*) as sharedClips
+    FROM ClipSpeaker cs1
+    JOIN ClipSpeaker cs2 ON cs1.clipId = cs2.clipId AND cs2.speakerId != cs1.speakerId
+    JOIN Speaker s ON s.id = cs2.speakerId
+    WHERE cs1.speakerId = ${speaker.id}
+    GROUP BY s.id
+    ORDER BY sharedClips DESC
+    LIMIT 16
+  `
+
   const statCard = (label: string, value: string | number, sub?: string) => (
     <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '2px 2px 0 #1a1a1a', textAlign: 'center' }}>
       <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1a1a1a' }}>{value}</div>
@@ -151,6 +164,29 @@ export default async function SpeakerPage({ params }: Props) {
             S{randomQuote.episode.season}E{randomQuote.episode.episodeNumber} &mdash; {randomQuote.episode.title}
           </p>
         </div>
+
+        {/* Co-speakers */}
+        {coSpeakers.length > 0 && (
+          <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+              Most Often Appears With
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+              {coSpeakers.map(co => (
+                <Link key={co.id} href={`/speaker/${co.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem', width: '4.5rem' }} title={`${co.sharedClips} shared clips`}>
+                  <img
+                    src={co.imageUrl ?? '/default-avatar.svg'}
+                    alt={co.name}
+                    style={{ width: '3.5rem', height: '3.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #1a1a1a', display: 'block' }}
+                  />
+                  <span style={{ fontSize: '0.65rem', color: '#444', textAlign: 'center', lineHeight: 1.2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', width: '100%' }}>
+                    {co.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Search their quotes */}
         <div style={{ textAlign: 'center' }}>
