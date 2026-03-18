@@ -46,8 +46,7 @@ export default function SearchForm({ shows, episodes, speakers }: Props) {
     setShowId(val)
     setSeason('')
     setEpisodeId('')
-    setSpeakerId('')
-    setSpeakerInput('')
+    setSpeakerName('')
   }
 
   function handleSeasonChange(val: string) {
@@ -111,11 +110,11 @@ export default function SearchForm({ shows, episodes, speakers }: Props) {
           {shows.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <select value={season} onChange={e => handleSeasonChange(e.target.value)} style={filterStyle} disabled={!showId}>
-          <option value="">All Seasons</option>
+          {!showId ? <option value="">Select a show first</option> : <option value="">All Seasons</option>}
           {seasons.map(n => <option key={n} value={n}>Season {n}</option>)}
         </select>
         <select value={episodeId} onChange={e => setEpisodeId(e.target.value)} style={{ ...filterStyle, flex: 1, minWidth: '10rem' }} disabled={!showId}>
-          <option value="">All Episodes</option>
+          {!showId ? <option value="">Select a show first</option> : <option value="">All Episodes</option>}
           {filteredEpisodes.map(ep => (
             <option key={ep.id} value={ep.id}>S{ep.season}E{ep.episodeNumber} — {ep.title}</option>
           ))}
