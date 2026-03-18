@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import prisma from '@/lib/prisma'
 import PageSizeSelector from './PageSizeSelector'
+import SpeakerLink from './SpeakerLink'
 
 interface Props {
   q: string
@@ -142,18 +143,12 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
                         borderTop: i > 0 ? '1px solid #e5e5e5' : undefined,
                       }}
                     >
-                      {quote.speaker?.imageUrl ? (
-                        <img
-                          src={quote.speaker.imageUrl}
-                          alt={quote.speaker.name}
-                          style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #1a1a1a', flexShrink: 0 }}
-                        />
-                      ) : (
-                        <img src="/default-avatar.svg" alt="Unknown speaker" style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #ccc', flexShrink: 0 }} />
-                      )}
-                      <span style={{ color: '#888', flexShrink: 0, width: '9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isMatch ? 700 : 400, fontSize: '0.75rem' }}>
-                        {quote.speaker?.name ?? 'UNKNOWN'}
-                      </span>
+                      <SpeakerLink
+                        id={quote.speaker?.id ?? null}
+                        name={quote.speaker?.name ?? null}
+                        imageUrl={quote.speaker?.imageUrl ?? null}
+                        isMatch={isMatch}
+                      />
                       <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444' }}>
                         {quote.text}
                       </span>

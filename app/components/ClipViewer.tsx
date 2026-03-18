@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import SpeakerLink from './SpeakerLink'
 
 interface Quote {
   id: number
   text: string
   sequence: number
-  speaker: { name: string; imageUrl: string | null } | null
+  speaker: { id: number; name: string; imageUrl: string | null } | null
 }
 
 interface Props {
@@ -69,18 +70,12 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
               }}
               title="Click to seek to this line"
             >
-              {quote.speaker?.imageUrl ? (
-                <img
-                  src={quote.speaker.imageUrl}
-                  alt={quote.speaker.name}
-                  style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #1a1a1a', flexShrink: 0 }}
-                />
-              ) : (
-                <img src="/default-avatar.svg" alt="Unknown speaker" style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #ccc', flexShrink: 0 }} />
-              )}
-              <span style={{ color: '#888', flexShrink: 0, width: '9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isMatch ? 700 : 400, fontSize: '0.75rem' }}>
-                {quote.speaker?.name ?? 'UNKNOWN'}
-              </span>
+              <SpeakerLink
+                id={quote.speaker?.id ?? null}
+                name={quote.speaker?.name ?? null}
+                imageUrl={quote.speaker?.imageUrl ?? null}
+                isMatch={!!isMatch}
+              />
               <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444' }}>
                 {quote.text}
               </span>
