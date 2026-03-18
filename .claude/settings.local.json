@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Read(//c/Users/dxm27/Documents/dev/saywhatnow/**)",
+      "Bash(find C:Usersdxm27Documentsdevsaywhatnowscripts -type f -name *.php)",
+      "Bash(npm run:*)",
+      "Bash(cmd.exe /c \"powershell -Command \"\"Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\"\"\")",
+      "Bash(cmd.exe /c \"powershell -Command \"\"Get-ChildItem ''C:\\\\Users\\\\dxm27\\\\AppData\\\\Roaming\\\\nvm'' -ErrorAction SilentlyContinue | Select-Object Name\"\"\")",
+      "Bash(cmd.exe /c \"powershell -Command \"\"Get-ChildItem ''C:\\\\Users\\\\dxm27\\\\AppData\\\\Local\\\\Programs'' -ErrorAction SilentlyContinue | Select-Object Name\"\"\")",
+      "Bash(cmd.exe /c \"powershell -Command \"\"\\(Get-Command node\\).Source\"\"\")",
+      "Bash(npx prisma:*)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; echo ''done''\")",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(cmd.exe /c \"taskkill /F /IM node.exe\")",
+      "Bash(npx tsx -e \":*)",
+      "Bash(npx tsx:*)"
+    ]
+  }
+}
