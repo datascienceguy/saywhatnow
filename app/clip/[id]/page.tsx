@@ -41,7 +41,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
         </span>
       </header>
 
-      <div style={{ maxWidth: '720px', margin: '2rem auto', padding: '0 1rem' }}>
+      <div style={{ maxWidth: '1100px', margin: '2rem auto', padding: '0 1rem' }}>
         {clip.filePath.endsWith('.mp4') ? (
           <ClipViewer
             src={clip.filePath}

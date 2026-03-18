@@ -44,14 +44,16 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
   }
 
   return (
-    <>
-      <div style={{ border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: '#000', display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-        <video ref={videoRef} controls autoPlay style={{ display: 'block', maxWidth: '100%' }}>
+    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {/* Video column */}
+      <div style={{ flex: '0 0 auto', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: '#000', display: 'flex', justifyContent: 'center' }}>
+        <video ref={videoRef} controls autoPlay style={{ display: 'block', maxWidth: '100%', maxHeight: '360px' }}>
           <source src={src} type="video/mp4" />
         </video>
       </div>
 
-      <div style={{ border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: 'white' }}>
+      {/* Quotes column */}
+      <div style={{ flex: '1 1 280px', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: 'white', maxHeight: '360px', overflowY: 'auto' }}>
         {quotes.map((quote, i) => {
           const isMatch = lowerQ && quote.text.toLowerCase().includes(lowerQ)
           return (
@@ -59,11 +61,11 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
               key={quote.id}
               onClick={() => seekTo(i)}
               style={{
-                padding: '0.4rem 1rem',
+                padding: '0.4rem 0.75rem',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.75rem',
-                fontSize: '0.875rem',
+                gap: '0.5rem',
+                fontSize: '0.8rem',
                 background: isMatch ? '#FFFBCC' : i % 2 === 0 ? '#fff' : '#fafafa',
                 borderTop: i > 0 ? '1px solid #e5e5e5' : undefined,
                 cursor: 'pointer',
@@ -76,13 +78,13 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
                 imageUrl={quote.speaker?.imageUrl ?? null}
                 isMatch={!!isMatch}
               />
-              <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444' }}>
+              <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444', lineHeight: 1.3 }}>
                 {quote.text}
               </span>
             </div>
           )
         })}
       </div>
-    </>
+    </div>
   )
 }

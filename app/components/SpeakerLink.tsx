@@ -9,7 +9,8 @@ interface Props {
 
 export default function SpeakerLink({ id, name, imageUrl, isMatch }: Props) {
   function handleClick(e: React.MouseEvent) {
-    if (id) e.stopPropagation()
+    e.stopPropagation()
+    if (id) window.location.href = `/speaker/${id}`
   }
 
   const img = imageUrl
@@ -22,16 +23,13 @@ export default function SpeakerLink({ id, name, imageUrl, isMatch }: Props) {
     </span>
   )
 
-  if (!id) return <>{img}{nameEl}</>
-
   return (
-    <a
-      href={`/speaker/${id}`}
-      onClick={handleClick}
-      style={{ display: 'contents', textDecoration: 'none' }}
+    <div
+      onClick={id ? handleClick : undefined}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, cursor: id ? 'pointer' : 'default' }}
     >
       {img}
       {nameEl}
-    </a>
+    </div>
   )
 }
