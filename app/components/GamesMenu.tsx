@@ -32,6 +32,13 @@ export default function GamesMenu() {
           >
             Hangman
           </Link>
+          <Link
+            href="/games/match-quote"
+            onClick={() => setOpen(false)}
+            style={{ display: 'block', padding: '0.5rem 1rem', textDecoration: 'none', color: '#1a1a1a', fontSize: '0.875rem', fontWeight: 600, borderTop: '1px solid #e5e5e5' }}
+          >
+            Match the Quote
+          </Link>
         </div>
       )}
     </div>
