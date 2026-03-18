@@ -46,3 +46,6 @@ next-env.d.ts
 prisma/*.db
 prisma/*.db-shm
 prisma/*.db-wal
+
+# Video clips (copyrighted, large binaries — stored locally only)
+/public/clips/

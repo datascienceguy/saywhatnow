@@ -103,17 +103,23 @@ function main() {
   // Speakers
   console.log('Migrating speakers...')
   const speakers = extractInserts(sql, 'speakers')
+  const speakerPictures = extractInserts(sql, 'speaker_pictures')
+  const speakerImageMap: Record<number, string> = {}
+  for (const p of speakerPictures) {
+    speakerImageMap[p.speaker_id as number] = p.image_url as string
+  }
   const insertSp = db.prepare(
-    'INSERT OR IGNORE INTO Speaker (id, showId, name, type) VALUES (?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO Speaker (id, showId, name, type, imageUrl) VALUES (?, ?, ?, ?, ?)'
   )
   const insertSpBatch = db.transaction((rows: typeof speakers) => {
     for (const s of rows) {
       insertSp.run(s.speaker_id, s.show_id, s.name,
-        SPEAKER_TYPE_MAP[s.speaker_type_id as number] ?? 'OTHER')
+        SPEAKER_TYPE_MAP[s.speaker_type_id as number] ?? 'OTHER',
+        speakerImageMap[s.speaker_id as number] ?? null)
     }
   })
   insertSpBatch(speakers)
-  console.log(`  ${speakers.length} speakers`)
+  console.log(`  ${speakers.length} speakers (${Object.keys(speakerImageMap).length} with images)`)
 
   // Clips
   console.log('Migrating clips...')

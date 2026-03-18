@@ -46,6 +46,7 @@ model Speaker {
   showId         Int
   name           String
   type           String        @default("RECURRING")
+  imageUrl       String?
   show           Show          @relation(fields: [showId], references: [id])
   quotes         Quote[]
   clips          ClipSpeaker[]

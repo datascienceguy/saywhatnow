@@ -1,34 +1,68 @@
+import Link from 'next/link'
+import { Suspense } from 'react'
 import prisma from '@/lib/prisma'
+import PageSizeSelector from './PageSizeSelector'
 
 interface Props {
   q: string
   showId?: string
   season?: string
+  episodeId?: string
+  speakerName?: string
+  page?: string
+  limit?: string
 }
 
-export default async function SearchResults({ q, showId, season }: Props) {
-  if (q.length < 2) return <p className="mt-8 text-gray-400 text-sm">Query too short</p>
+function buildClipUrl(clipId: number, q: string, showId?: string, season?: string, episodeId?: string, speakerName?: string) {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (showId) params.set('showId', showId)
+  if (season) params.set('season', season)
+  if (episodeId) params.set('episodeId', episodeId)
+  if (speakerName) params.set('speakerName', speakerName)
+  return `/clip/${clipId}?${params.toString()}`
+}
+
+function buildPageUrl(q: string, page: number, limit: number, showId?: string, season?: string, episodeId?: string, speakerName?: string) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+  if (q) params.set('q', q)
+  if (showId) params.set('showId', showId)
+  if (season) params.set('season', season)
+  if (episodeId) params.set('episodeId', episodeId)
+  if (speakerName) params.set('speakerName', speakerName)
+  return `/?${params.toString()}`
+}
+
+export default async function SearchResults({ q, showId, season, episodeId, speakerName, page: pageStr, limit: limitStr }: Props) {
+  if (q.length < 2 && !episodeId && !speakerName) {
+    return <p className="mt-8 text-gray-400 text-sm">Enter a quote, speaker, or select an episode to search.</p>
+  }
+
+  const limit = Math.min(Math.max(Number(limitStr) || 10, 1), 100)
+  const page = Math.max(Number(pageStr) || 1, 1)
 
   const matchingQuotes = await prisma.quote.findMany({
     where: {
-      text: { contains: q },
-      ...(showId || season ? {
+      ...(q.length >= 2 ? { text: { contains: q } } : {}),
+      ...(speakerName ? { speaker: { name: { contains: speakerName } } } : {}),
+      ...(showId || season || episodeId ? {
         episode: {
-          ...(showId ? { showId: Number(showId) } : {}),
-          ...(season ? { season: Number(season) } : {}),
+          ...(episodeId ? { id: Number(episodeId) } : {
+            ...(showId ? { showId: Number(showId) } : {}),
+            ...(season ? { season: Number(season) } : {}),
+          }),
         }
       } : {}),
     },
     select: { clipId: true },
     distinct: ['clipId'],
-    take: 30,
   })
 
-  if (matchingQuotes.length === 0) {
-    return <p className="mt-8 text-gray-400 text-sm">No results for &ldquo;{q}&rdquo;</p>
-  }
-
+  const totalClips = matchingQuotes.length
+  const totalPages = Math.ceil(totalClips / limit)
+  const clampedPage = Math.min(page, totalPages || 1)
   const clipIds = matchingQuotes.map(r => r.clipId)
+
   const clips = await prisma.clip.findMany({
     where: { id: { in: clipIds } },
     include: {
@@ -43,45 +77,114 @@ export default async function SearchResults({ q, showId, season }: Props) {
       { episode: { episodeNumber: 'asc' } },
       { id: 'asc' },
     ],
+    skip: (clampedPage - 1) * limit,
+    take: limit,
   })
+
+  if (totalClips === 0) {
+    return <p className="mt-8 text-gray-400 text-sm">No results for &ldquo;{q}&rdquo;</p>
+  }
 
   const lowerQ = q.toLowerCase()
 
   return (
     <div className="mt-8 space-y-4">
-      <p className="text-sm text-gray-500">{clips.length} clip{clips.length !== 1 ? 's' : ''} found</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <p className="text-sm font-semibold" style={{ color: '#1B4F72' }}>
+          {totalClips} clip{totalClips !== 1 ? 's' : ''} found
+          {totalPages > 1 && <span style={{ fontWeight: 400 }}> — page {clampedPage} of {totalPages}</span>}
+        </p>
+        <Suspense>
+          <PageSizeSelector current={limit} />
+        </Suspense>
+      </div>
 
       {clips.map(clip => {
         const ep = clip.episode
+        const quotes = clip.quotes
+        const matchIndices = quotes
+          .map((qt, i) => qt.text.toLowerCase().includes(lowerQ) ? i : -1)
+          .filter(i => i !== -1)
+        const visibleIndices = new Set<number>()
+        for (const mi of matchIndices) {
+          if (mi > 0) visibleIndices.add(mi - 1)
+          visibleIndices.add(mi)
+          if (mi < quotes.length - 1) visibleIndices.add(mi + 1)
+        }
+        const visibleQuotes = quotes.filter((_, i) => visibleIndices.has(i))
+
         return (
-          <div key={clip.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <div className="bg-gray-50 dark:bg-gray-800 px-4 py-2 flex items-center justify-between text-sm">
-              <span className="font-medium">
-                {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
-              </span>
-              <span className="text-gray-400 text-xs">{clip.startTime} &ndash; {clip.stopTime}</span>
+          <Link
+            key={clip.id}
+            href={buildClipUrl(clip.id, q, showId, season, episodeId, speakerName)}
+            style={{ textDecoration: 'none', display: 'block' }}
+          >
+            <div style={{ border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: 'white', cursor: 'pointer' }}>
+              <div style={{ background: '#FED90F', borderBottom: '2px solid #1a1a1a', padding: '0.4rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a' }}>
+                  {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#5a3e00' }}>{clip.startTime} &ndash; {clip.stopTime}</span>
+              </div>
+              <div>
+                {visibleQuotes.map((quote, i) => {
+                  const isMatch = quote.text.toLowerCase().includes(lowerQ)
+                  return (
+                    <div
+                      key={quote.id}
+                      style={{
+                        padding: '0.4rem 1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        fontSize: '0.875rem',
+                        background: isMatch ? '#FFFBCC' : i % 2 === 0 ? '#fff' : '#fafafa',
+                        borderTop: i > 0 ? '1px solid #e5e5e5' : undefined,
+                      }}
+                    >
+                      {quote.speaker?.imageUrl ? (
+                        <img
+                          src={quote.speaker.imageUrl}
+                          alt={quote.speaker.name}
+                          style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #1a1a1a', flexShrink: 0 }}
+                        />
+                      ) : (
+                        <img src="/default-avatar.svg" alt="Unknown speaker" style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #ccc', flexShrink: 0 }} />
+                      )}
+                      <span style={{ color: '#888', flexShrink: 0, width: '9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isMatch ? 700 : 400, fontSize: '0.75rem' }}>
+                        {quote.speaker?.name ?? 'UNKNOWN'}
+                      </span>
+                      <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444' }}>
+                        {quote.text}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {clip.quotes.map(quote => {
-                const isMatch = quote.text.toLowerCase().includes(lowerQ)
-                return (
-                  <div
-                    key={quote.id}
-                    className={`px-4 py-2 text-sm flex gap-3 ${isMatch ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`}
-                  >
-                    <span className="text-gray-400 shrink-0 w-40 truncate">
-                      {quote.speaker?.name ?? 'UNKNOWN'}
-                    </span>
-                    <span className={isMatch ? 'font-medium' : 'text-gray-600 dark:text-gray-400'}>
-                      {quote.text}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          </Link>
         )
       })}
+
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', paddingTop: '0.5rem' }}>
+          {clampedPage > 1 ? (
+            <Link href={buildPageUrl(q, clampedPage - 1, limit, showId, season, episodeId, speakerName)} style={{ textDecoration: 'none', border: '2px solid #1a1a1a', padding: '0.3rem 0.8rem', borderRadius: '6px', background: '#FED90F', fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', boxShadow: '2px 2px 0 #1a1a1a' }}>
+              ← Prev
+            </Link>
+          ) : (
+            <span style={{ border: '2px solid #ccc', padding: '0.3rem 0.8rem', borderRadius: '6px', background: '#f5f5f5', fontWeight: 700, fontSize: '0.875rem', color: '#aaa' }}>← Prev</span>
+          )}
+          <span style={{ fontSize: '0.875rem', color: '#1B4F72', fontWeight: 600 }}>{clampedPage} / {totalPages}</span>
+          {clampedPage < totalPages ? (
+            <Link href={buildPageUrl(q, clampedPage + 1, limit, showId, season, episodeId, speakerName)} style={{ textDecoration: 'none', border: '2px solid #1a1a1a', padding: '0.3rem 0.8rem', borderRadius: '6px', background: '#FED90F', fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', boxShadow: '2px 2px 0 #1a1a1a' }}>
+              Next →
+            </Link>
+          ) : (
+            <span style={{ border: '2px solid #ccc', padding: '0.3rem 0.8rem', borderRadius: '6px', background: '#f5f5f5', fontWeight: 700, fontSize: '0.875rem', color: '#aaa' }}>Next →</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

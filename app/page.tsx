@@ -4,33 +4,52 @@ import SearchForm from './components/SearchForm'
 import SearchResults from './components/SearchResults'
 
 interface PageProps {
-  searchParams: Promise<{ q?: string; showId?: string; season?: string }>
+  searchParams: Promise<{ q?: string; showId?: string; season?: string; episodeId?: string; speakerName?: string; page?: string; limit?: string }>
 }
 
 export default async function HomePage({ searchParams }: PageProps) {
   const params = await searchParams
   const shows = await prisma.show.findMany({ orderBy: { name: 'asc' } })
+  const episodes = await prisma.episode.findMany({
+    select: { id: true, showId: true, season: true, episodeNumber: true, title: true },
+    orderBy: [{ showId: 'asc' }, { season: 'asc' }, { episodeNumber: 'asc' }],
+  })
+  const speakers = await prisma.speaker.findMany({
+    select: { id: true, showId: true, name: true },
+    orderBy: { name: 'asc' },
+  })
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-2">SayWhatNow</h1>
-      <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
-        Search quotes from The Simpsons, Futurama, and Scrubs
-      </p>
+    <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #87CEEB 0%, #B0E0FF 100%)' }}>
+      {/* Header bar */}
+      <header style={{ background: '#FED90F', borderBottom: '4px solid #1a1a1a' }}>
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-end gap-3">
+          <h1
+            style={{ fontFamily: 'var(--font-bangers)', fontSize: '3rem', letterSpacing: '0.05em', color: '#1a1a1a', lineHeight: 1, textShadow: '2px 2px 0 #fff' }}
+          >
+            SayWhatNow
+          </h1>
+          <p style={{ color: '#5a3e00', fontSize: '0.85rem', paddingBottom: '0.3rem' }}>
+            Search quotes from The Simpsons, Futurama &amp; Scrubs
+          </p>
+        </div>
+      </header>
 
-      <Suspense>
-        <SearchForm shows={shows} />
-      </Suspense>
-
-      {params.q && (
-        <Suspense fallback={<p className="mt-8 text-gray-500">Searching...</p>}>
-          <SearchResults q={params.q} showId={params.showId} season={params.season} />
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <Suspense>
+          <SearchForm shows={shows} episodes={episodes} speakers={speakers} />
         </Suspense>
-      )}
 
-      {!params.q && (
-        <p className="mt-12 text-center text-gray-400 text-sm">Enter a quote to search</p>
-      )}
-    </main>
+        {(params.q || params.episodeId || params.speakerName) && (
+          <Suspense fallback={<p className="mt-8" style={{ color: '#1B4F72' }}>Searching...</p>}>
+            <SearchResults q={params.q ?? ''} showId={params.showId} season={params.season} episodeId={params.episodeId} speakerName={params.speakerName} page={params.page} limit={params.limit} />
+          </Suspense>
+        )}
+
+        {!(params.q || params.episodeId || params.speakerName) && (
+          <p className="mt-12 text-center text-sm" style={{ color: '#1B4F72' }}>D&apos;oh! Enter a quote to search.</p>
+        )}
+      </main>
+    </div>
   )
 }
