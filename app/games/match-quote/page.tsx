@@ -3,6 +3,8 @@ import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import BackButton from '@/app/components/BackButton'
 import GamesMenu from '@/app/components/GamesMenu'
+import SignOutButton from '@/app/components/SignOutButton'
+import { auth } from '@/auth'
 import MatchQuoteGame from './MatchQuoteGame'
 
 type QuoteRow = {
@@ -35,6 +37,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export default async function MatchQuotePage() {
+  const session = await auth()
   const quotes = await prisma.$queryRaw<QuoteRow[]>`
     SELECT q.id, q.text, q.clipId, q.speakerId,
            s.name as speakerName, s.imageUrl as speakerImageUrl, s.type as speakerType,
@@ -96,6 +99,7 @@ export default async function MatchQuotePage() {
         <GamesMenu />
         <span style={{ color: '#1a1a1a' }}>›</span>
         <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>Match the Quote</span>
+        <SignOutButton name={session?.user?.name} image={session?.user?.image} />
       </header>
       <MatchQuoteGame initialQuote={initialQuote} />
     </div>

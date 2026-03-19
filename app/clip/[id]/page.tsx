@@ -5,6 +5,8 @@ import ClipViewer from '@/app/components/ClipViewer'
 import SpeakerLink from '@/app/components/SpeakerLink'
 import BackButton from '@/app/components/BackButton'
 import GamesMenu from '@/app/components/GamesMenu'
+import SignOutButton from '@/app/components/SignOutButton'
+import { auth } from '@/auth'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -14,6 +16,7 @@ interface Props {
 export default async function ClipPage({ params, searchParams }: Props) {
   const { id } = await params
   const { q } = await searchParams
+  const session = await auth()
 
   const clip = await prisma.clip.findUnique({
     where: { id: Number(id) },
@@ -40,9 +43,10 @@ export default async function ClipPage({ params, searchParams }: Props) {
           {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
         </span>
         <GamesMenu />
-        <span style={{ fontSize: '0.75rem', color: '#5a3e00', marginLeft: 'auto' }}>
+        <span style={{ fontSize: '0.75rem', color: '#5a3e00' }}>
           {clip.startTime} &ndash; {clip.stopTime}
         </span>
+        <SignOutButton name={session?.user?.name} image={session?.user?.image} />
       </header>
 
       <div style={{ maxWidth: '1100px', margin: '2rem auto', padding: '0 1rem' }}>

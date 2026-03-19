@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma'
 import SearchForm from './components/SearchForm'
 import SearchResults from './components/SearchResults'
 import GamesMenu from './components/GamesMenu'
+import SignOutButton from './components/SignOutButton'
+import { auth } from '@/auth'
 
 interface PageProps {
   searchParams: Promise<{ q?: string; showId?: string; season?: string; episodeId?: string; speakerName?: string; page?: string; limit?: string }>
@@ -10,6 +12,7 @@ interface PageProps {
 
 export default async function HomePage({ searchParams }: PageProps) {
   const params = await searchParams
+  const session = await auth()
   const shows = await prisma.show.findMany({ orderBy: { name: 'asc' } })
   const episodes = await prisma.episode.findMany({
     select: { id: true, showId: true, season: true, episodeNumber: true, title: true },
@@ -33,8 +36,9 @@ export default async function HomePage({ searchParams }: PageProps) {
           <p style={{ color: '#5a3e00', fontSize: '0.85rem', paddingBottom: '0.3rem' }}>
             Search quotes from The Simpsons, Futurama &amp; Scrubs
           </p>
-          <div style={{ marginLeft: 'auto', paddingBottom: '0.3rem' }}>
+          <div style={{ marginLeft: 'auto', paddingBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <GamesMenu />
+            <SignOutButton name={session?.user?.name} image={session?.user?.image} />
           </div>
         </div>
       </header>

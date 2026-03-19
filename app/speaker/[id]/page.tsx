@@ -3,6 +3,8 @@ import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import BackButton from '@/app/components/BackButton'
 import GamesMenu from '@/app/components/GamesMenu'
+import SignOutButton from '@/app/components/SignOutButton'
+import { auth } from '@/auth'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -10,6 +12,7 @@ interface Props {
 
 export default async function SpeakerPage({ params }: Props) {
   const { id } = await params
+  const session = await auth()
 
   const speaker = await prisma.speaker.findUnique({
     where: { id: Number(id) },
@@ -104,7 +107,8 @@ export default async function SpeakerPage({ params }: Props) {
         <span style={{ color: '#1a1a1a' }}>›</span>
         <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>{speaker.name}</span>
         <GamesMenu />
-        <span style={{ fontSize: '0.8rem', color: '#5a3e00', marginLeft: 'auto' }}>{speaker.show.name}</span>
+        <span style={{ fontSize: '0.8rem', color: '#5a3e00' }}>{speaker.show.name}</span>
+        <SignOutButton name={session?.user?.name} image={session?.user?.image} />
       </header>
 
       <div style={{ maxWidth: '720px', margin: '2rem auto', padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
