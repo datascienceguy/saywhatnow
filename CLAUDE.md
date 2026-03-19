@@ -15,7 +15,7 @@ The new app is a modern rewrite of a legacy PHP/MySQL app at `C:\Users\dxm27\Doc
 | Styling | Tailwind CSS v4 |
 | ORM | Prisma 7 with `better-sqlite3` adapter |
 | Database | SQLite (local dev); planned migration to Postgres |
-| Auth | next-auth v5 (beta) — installed, not yet implemented |
+| Auth | next-auth v5 (beta) — Google OAuth, JWT sessions |
 
 ---
 
@@ -31,11 +31,13 @@ Show → Episode → Clip → Quote
 - **Episode** — season/episode/airdate/title, belongs to a Show
 - **Clip** — a video segment within an episode (startTime/stopTime, filePath to MP4)
 - **Quote** — a single line of dialogue within a clip, with a sequence number for ordering
-- **Speaker** — a character, scoped to a Show; types: MAIN, RECURRING, GUEST, ONE_TIME, OTHER
+- **Speaker** — a character, scoped to a Show; types: MAIN, RECURRING, GUEST, ONE_TIME, OTHER; has `imageUrl` for portrait photo
 - **ClipSpeaker** — join table tracking which speakers appear in a clip and how many lines they have
-- **User** — username/email/password/role (GUEST default); not yet actively used
+- **User** — username/email/password/role; present in schema but auth is handled by Google OAuth via next-auth (no password used)
 
 > **Note:** `Clip.keywords` is a comma-separated string — SQLite workaround. Migrate to a proper array/relation in Postgres.
+
+> **Note:** No per-quote timestamps exist in the data. The legacy app never stored when within a clip each line was spoken. Click-to-seek in the video player uses proportional estimation.
 
 ---
 
@@ -43,49 +45,113 @@ Show → Episode → Clip → Quote
 
 ```
 app/
-  page.tsx                  # Server component — home page, loads shows list, renders search UI
+  page.tsx                        # Home page — search UI, shows list
+  login/page.tsx                  # Google sign-in page
+  clip/[id]/page.tsx              # Clip detail — video player + quotes
+  speaker/[id]/page.tsx           # Speaker stats page
+  games/
+    hangman/page.tsx              # Hangman game (server + HangmanGame.tsx client)
+    match-quote/page.tsx          # Match the Quote game (server + MatchQuoteGame.tsx client)
   components/
-    SearchForm.tsx          # Client component — query input, show filter, season filter
-    SearchResults.tsx       # Server component — runs Prisma query, renders clip cards
+    SearchForm.tsx                # Client — query input, show/season/episode/speaker filters
+    SearchResults.tsx             # Server — Prisma query, paginated clip cards
+    ClipViewer.tsx                # Client — HTML5 video player + quote list, click-to-seek
+    SpeakerLink.tsx               # Client — speaker avatar + name, navigates to /speaker/[id]
+    ClickableCard.tsx             # Client — card wrapper using window.location.href (avoids Next.js Link event delegation)
+    BackButton.tsx                # Client — history.back()
+    PageSizeSelector.tsx          # Client — 10/25/50/100 results per page
+    GamesMenu.tsx                 # Client — Games dropdown nav menu
+    SignOutButton.tsx             # Client — shows user avatar + sign out button
+    Providers.tsx                 # Client — SessionProvider wrapper for layout
   api/
-    search/route.ts         # GET /api/search — same search logic as SearchResults but as JSON API
+    search/route.ts               # GET /api/search — JSON search API
+    games/
+      hangman/route.ts            # GET — random quote for Hangman
+      match-quote/route.ts        # GET — random quote + speaker choices for Match the Quote
+
+auth.ts                           # NextAuth v5 config — Google provider, email allowlist
+middleware.ts                     # Protects all routes, redirects to /login if unauthenticated
 
 lib/
-  prisma.ts                 # Prisma client singleton
+  prisma.ts                       # Prisma client singleton
 
 prisma/
-  schema.prisma             # Data model
-  migrations/               # SQL migration history
-  dev.db                    # Local SQLite database (gitignored)
+  schema.prisma                   # Data model
+  migrations/                     # SQL migration history
+  dev.db                          # Local SQLite database (gitignored)
 
 scripts/
-  migrate-legacy.ts         # One-time migration: reads legacy swn_videos_new.sql → populates dev.db
+  migrate-legacy.ts               # One-time migration: legacy MySQL dump → dev.db
+
+public/
+  clips/                          # MP4 video clips (gitignored — copyrighted)
+    simpsons/season4-season13/    # All converted (3,658 clips total)
+    scrubs/season1/               # Converted (134 clips)
+  pictures/                       # Speaker portrait images (703 files, lowercased)
+  default-avatar.svg              # Fallback avatar for speakers without photos
 ```
 
 ---
 
-## Search Logic
+## Auth
 
-Search is implemented in two places (both do the same thing):
+- **Provider:** Google OAuth via next-auth v5 (JWT sessions, no DB adapter)
+- **Env vars:** `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`
+- **Allowlist:** Set `AUTH_ALLOWED_EMAILS` (comma-separated) in `.env.local` to restrict to specific Google accounts. Leave blank to allow any Google account.
+- **Middleware:** All routes protected except `/api/auth/*`, `/_next/*`, `/login`, and static assets
+- **Sign-out:** Button with user avatar in every page header
 
-1. **`SearchResults` (server component)** — used for SSR page renders
-2. **`GET /api/search`** — used for client-side fetch if needed
+---
+
+## Search
+
+Filters: show, season, episode (dropdown), speaker name (contains match, autocomplete via datalist).
+Results require either a quote (`q`), episode selection, or speaker name — not all three.
+Pagination: 10/25/50/100 per page via `PageSizeSelector`.
 
 Flow:
-1. Query `Quote` where `text CONTAINS q`, optionally filtered by showId / season
-2. Collect distinct `clipId`s (max 30)
-3. Fetch full `Clip` records with all quotes and episode/show metadata
-4. Mark each quote with `isMatch: true` if it contains the search term
+1. Query `Quote` where `text CONTAINS q`, filtered by showId / season / episodeId / speakerName
+2. Collect distinct `clipId`s
+3. Fetch full `Clip` records with quotes + episode/show metadata, paginated
+4. Show ±1 context quotes around matching lines
 5. Order: season → episode → clip id
+
+---
+
+## Video
+
+- All clips converted from legacy FLV to MP4 using ffmpeg (`libx264 -crf 18 -preset fast`)
+- `ClipViewer` renders HTML5 `<video>` with quotes side-by-side
+- Click-to-seek: proportional timestamp estimation `(index / total) * clipDuration`
+- Video pauses on unmount (useEffect cleanup)
+- Clips stored in `public/clips/` (gitignored)
+
+---
+
+## Speaker Pages
+
+`/speaker/[id]` shows: profile card, stats grid (quotes, words, episodes, clips, avg words/line, most active season), most repeated quote (links to clip), random quote (links to clip), co-speakers grid (via `$queryRaw` self-join on ClipSpeaker), link to search that speaker's quotes.
+
+---
+
+## Games
+
+All games live under `/games/` with matching API routes under `/api/games/`.
+
+- **Hangman** (`/games/hangman`) — Random short quote (10–45 chars), guess letters, 6 wrong guesses allowed. Speaker image revealed tile-by-tile (3×2 grid) with each wrong guess.
+- **Match the Quote** (`/games/match-quote`) — Random 5+ word quote, pick the speaker from 8 choices (4×2 grid). Decoys sourced from co-speakers first, then same-show speakers. 3 guesses.
+
+Games menu (`GamesMenu.tsx`) appears in all page headers as a dropdown.
 
 ---
 
 ## Key Notes
 
-- **SearchResults duplicates the API route logic** — both hit Prisma directly. If search logic evolves, update both.
+- **`ClickableCard`** wraps search result cards instead of Next.js `<Link>` — required because Next.js Link event delegation defeats `stopPropagation` from nested speaker links.
+- **Speaker image paths** are lowercased filenames in `public/pictures/` (e.g. `homer_simpson.png`).
+- **`$queryRaw`** used for co-speaker query (self-join) and game quote selection (`ORDER BY RANDOM()`).
+- **`prisma generate`** must be re-run after schema changes — TypeScript types don't update automatically.
 - **SQLite → Postgres migration planned** — `Clip.keywords` and `contains` queries will need updating.
-- **`scripts/migrate-legacy.ts`** reads a MySQL dump (`swn_videos_new.sql`) from `../../saywhatnow/` and bulk-inserts via `better-sqlite3` directly (not Prisma).
-- **next-auth** is installed but auth flows (login, sessions, protected routes) are not yet built.
 
 ---
 
@@ -95,84 +161,63 @@ Flow:
 npm run dev                               # start dev server
 npx tsx scripts/migrate-legacy.ts        # run legacy data migration
 npx prisma studio                        # browse database
+npx prisma generate                      # regenerate client after schema changes
 ```
+
+Requires `.env.local` with `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL`.
 
 ---
 
 ## Feature Roadmap
 
-Tracking what the legacy PHP app had and what's been built in the new stack.
-
 ### ✅ Done
-- **Search** — full-text quote search filtered by show/season, returns clip context with matched lines highlighted
+- **Search** — full-text quote search, filters by show/season/episode/speaker, paginated results
+- **Clip detail page** — HTML5 video player + quotes side-by-side, click-to-seek, context highlighting
+- **Speaker detail page** — stats, co-speakers, quote cards linking to clips
+- **Speaker portraits** — 703 images migrated from legacy app
+- **Video conversion** — all 3,658 Simpsons + 134 Scrubs FLVs converted to MP4
+- **Games** — Hangman, Match the Quote
+- **Auth** — Google OAuth via next-auth v5, all routes protected
 
 ### 🔲 To Build
 
-#### User Auth
-- Registration, login, logout (next-auth)
-- Multi-level permissions: GUEST (0), SEARCH (1), ADD_KEYWORDS (2), UPDATE_QUOTES (3), EDIT_EPISODE (7), ADMIN (9)
-- Password reset via email
-- User preferences (results per page)
-- Request video access flow
-
-#### Video Playback
-- Clip video player (MP4 — legacy used Flash/FLV, new app will use HTML5)
-- Embedded clip widget for sharing
-- Embedded quotes widget
-
-#### Quote & Clip Editing *(EDIT_EPISODE level)*
+#### Quote & Clip Editing *(requires role gating)*
 - Edit quote text, speaker, sequence order within a clip
 - Add / delete quotes
-- Upload and parse caption files to bulk-create quotes
+- Upload and parse SRT/caption files to bulk-create quotes with timestamps
 - Manage clip start/stop times
 
-#### Episode Management *(EDIT_EPISODE level)*
-- Add new episodes (show, season, number, title, air date)
-- Split-pane editor: video + quote editor side by side
+#### Adding New Content
+- Import pipeline for new seasons: yt-dlp or disc rip → SRT from OpenSubtitles → parse + split → ffmpeg clip extraction → DB import
+- SRT-based import would add per-quote timestamps (not in legacy data)
 
-#### Speaker Management *(ADMIN level)*
-- Add / rename / delete speakers
-- Merge duplicate speakers
-- Speaker aliases
-- Upload character photos
-- Speaker photo gallery
+#### Episode & Speaker Management
+- Add new episodes
+- Add / rename / merge speakers
+- Upload speaker photos
 
 #### Statistics Pages
-- Speaker stats — quote count, appearances, seasons, character card with photo
 - Episode stats — quotes per episode, season breakdown
 - Show stats — season-level overview
-- Filterable by show / season / speaker type
 
-#### Games
-- **Hangman** — random quote, guess the speaker letter by letter
-- **Match the Quote** — given a quote, pick the speaker (beginner: multiple choice; advanced: free-form)
-
-#### Admin Panel *(ADMIN level)*
-- User list with search/filter
-- Edit username, email, permission level
-- Ban / unban / delete users
-- Grant / deny video access with email notification
+#### Admin Panel
+- User list, permission management
 
 #### Community / Info
-- FAQ page
-- Feedback form
-- News / updates feed
+- FAQ, feedback form
 
 ---
 
 ## Legacy App Reference
 
 The legacy PHP app lives at `C:\Users\dxm27\Documents\dev\saywhatnow`.
-Key files for reference:
-- `scripts/sql/get_sql.php` — all read queries (3,400+ lines)
+Key files:
+- `scripts/sql/get_sql.php` — all read queries
 - `scripts/sql/set_sql.php` — all write queries
-- `scripts/users/include/session.php` — session/auth logic
-- `scripts/search/` — search UI and backend
-- `scripts/editEpisode/` — episode + caption editor
+- `scripts/editEpisode/` — episode + caption editor (SRT parsing workflow)
 - `scripts/editSpeaker/` — speaker management
 - `scripts/games/` — Hangman and speaker matching games
-- `scripts/stats/` — statistics pages
-- `pictures/` — character photos (PNG/JPG)
-- `swn_videos_new.sql` — full MySQL data dump (source for migration)
+- `pictures/` — character photos
+- `swn_videos_new.sql` — full MySQL data dump
 
 *Keep this file updated as the architecture evolves.*
