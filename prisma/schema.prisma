@@ -7,10 +7,11 @@ datasource db {
 }
 
 model Show {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  episodes Episode[]
-  speakers Speaker[]
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  episodes        Episode[]
+  speakers        Speaker[]
+  stagingEpisodes StagingEpisode[]
 }
 
 model Episode {
@@ -87,5 +88,48 @@ model User {
   password  String
   role      String   @default("GUEST")
   createdAt DateTime @default(now())
+}
+
+model StagingEpisode {
+  id             Int            @id @default(autoincrement())
+  showId         Int
+  season         Int
+  episodeNumber  Int
+  title          String
+  airDate        DateTime?
+  productionCode String?
+  basename       String         @unique
+  videoPath      String
+  quotesPath     String
+  status         String         @default("DRAFT")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  show           Show           @relation(fields: [showId], references: [id])
+  clips          StagingClip[]
+  quotes         StagingQuote[]
+}
+
+model StagingClip {
+  id               Int            @id @default(autoincrement())
+  stagingEpisodeId Int
+  index            Int
+  startTime        Float
+  endTime          Float
+  stagingEpisode   StagingEpisode @relation(fields: [stagingEpisodeId], references: [id])
+  quotes           StagingQuote[]
+}
+
+model StagingQuote {
+  id               Int            @id @default(autoincrement())
+  stagingEpisodeId Int
+  stagingClipId    Int?
+  speaker          String
+  text             String
+  startTime        Float?
+  endTime          Float?
+  matchMethod      String?
+  sequence         Int
+  stagingEpisode   StagingEpisode @relation(fields: [stagingEpisodeId], references: [id])
+  stagingClip      StagingClip?   @relation(fields: [stagingClipId], references: [id])
 }
 

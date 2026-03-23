@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import SearchForm from './components/SearchForm'
 import SearchResults from './components/SearchResults'
@@ -38,6 +39,14 @@ export default async function HomePage({ searchParams }: PageProps) {
           </p>
           <div style={{ marginLeft: 'auto', paddingBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <GamesMenu />
+            {(session?.user as { role?: string })?.role === 'ADMIN' && (
+              <Link
+                href="/admin/staging"
+                style={{ fontSize: '0.8rem', fontWeight: 600, background: '#1a1a1a', color: '#FED90F', padding: '0.25rem 0.6rem', borderRadius: '4px', textDecoration: 'none' }}
+              >
+                Admin
+              </Link>
+            )}
             <SignOutButton name={session?.user?.name} image={session?.user?.image} />
           </div>
         </div>

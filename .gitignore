@@ -49,3 +49,7 @@ prisma/*.db-wal
 
 # Video clips (copyrighted, large binaries — stored locally only)
 /public/clips/
+
+# Episode processing working directory (large video files)
+/clips/
+/clip_prep/
