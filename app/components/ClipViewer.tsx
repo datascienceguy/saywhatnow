@@ -18,7 +18,9 @@ interface Props {
   matchQ?: string
 }
 
-function parseSrtTime(t: string): number {
+function parseTime(t: string): number {
+  // Plain seconds (e.g. "83.5") or SRT format (e.g. "00:01:23,456")
+  if (!t.includes(':')) return parseFloat(t) || 0
   const [hms, ms] = t.split(',')
   const [h, m, s] = hms.split(':').map(Number)
   return h * 3600 + m * 60 + s + Number(ms) / 1000
@@ -31,7 +33,7 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
     return () => { videoRef.current?.pause() }
   }, [])
 
-  const clipDuration = parseSrtTime(stopTime) - parseSrtTime(startTime)
+  const clipDuration = parseTime(stopTime) - parseTime(startTime)
   const lowerQ = matchQ?.toLowerCase() ?? ''
 
   function seekTo(index: number) {
@@ -39,6 +41,7 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
     const offset = quotes.length > 1
       ? (index / (quotes.length - 1)) * clipDuration
       : 0
+    if (!isFinite(offset)) return
     videoRef.current.currentTime = Math.max(0, offset)
     videoRef.current.play()
   }

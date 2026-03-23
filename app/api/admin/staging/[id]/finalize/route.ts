@@ -91,7 +91,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           showId: staging.showId,
           season: staging.season,
           episodeNumber: staging.episodeNumber,
-          title: staging.title,
+          title: staging.title.toUpperCase(),
           airDate: staging.airDate,
           productionCode: staging.productionCode ?? staging.basename.toUpperCase(),
         },
@@ -164,7 +164,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         }
 
         await prisma.quote.create({
-          data: { episodeId: episode.id, clipId: clip.id, speakerId, text: sq.text, sequence: sequence++ },
+          data: { episodeId: episode.id, clipId: clip.id, speakerId, text: sq.text.toUpperCase(), sequence: sequence++ },
         })
       }
 
