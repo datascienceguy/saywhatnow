@@ -5,6 +5,11 @@ import { NextResponse } from 'next/server'
 const { auth } = NextAuth(authConfig)
 
 export default auth((req) => {
+  const internalSecret = process.env.INTERNAL_API_SECRET
+  if (internalSecret && req.headers.get('x-internal-secret') === internalSecret) {
+    return NextResponse.next()
+  }
+
   if (!req.auth) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
