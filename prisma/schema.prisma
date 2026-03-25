@@ -48,6 +48,7 @@ model Speaker {
   name           String
   type           String        @default("RECURRING")
   imageUrl       String?
+  imagePosition  String?       // CSS object-position, e.g. "center top", "50% 20%"
   show           Show          @relation(fields: [showId], references: [id])
   quotes         Quote[]
   clips          ClipSpeaker[]

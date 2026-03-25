@@ -3,10 +3,10 @@ import { prisma } from '@/lib/prisma'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { name, type, imageUrl } = await req.json()
+  const { name, type, imageUrl, imagePosition } = await req.json()
   const speaker = await prisma.speaker.update({
     where: { id: Number(id) },
-    data: { name, type, imageUrl },
+    data: { name, type, imageUrl, imagePosition },
   })
   return NextResponse.json(speaker)
 }

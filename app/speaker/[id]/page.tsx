@@ -79,9 +79,9 @@ export default async function SpeakerPage({ params }: Props) {
   const avgWords = Math.round(wordCount / quoteCount)
 
   // Co-speakers
-  type CoSpeaker = { id: number; name: string; imageUrl: string | null; sharedClips: number }
+  type CoSpeaker = { id: number; name: string; imageUrl: string | null; imagePosition: string | null; sharedClips: number }
   const coSpeakers = await prisma.$queryRaw<CoSpeaker[]>`
-    SELECT s.id, s.name, s.imageUrl, COUNT(*) as sharedClips
+    SELECT s.id, s.name, s.imageUrl, s.imagePosition, COUNT(*) as sharedClips
     FROM ClipSpeaker cs1
     JOIN ClipSpeaker cs2 ON cs1.clipId = cs2.clipId AND cs2.speakerId != cs1.speakerId
     JOIN Speaker s ON s.id = cs2.speakerId
@@ -121,7 +121,7 @@ export default async function SpeakerPage({ params }: Props) {
           <img
             src={speaker.imageUrl ?? '/default-avatar.svg'}
             alt={speaker.name}
-            style={{ width: '6rem', height: '6rem', objectFit: 'cover', borderRadius: '50%', border: '3px solid #1a1a1a', flexShrink: 0 }}
+            style={{ width: '6rem', height: '6rem', objectFit: 'cover', objectPosition: speaker.imagePosition ?? 'center center', borderRadius: '50%', border: '3px solid #1a1a1a', flexShrink: 0 }}
           />
           <div>
             <h1 style={{ fontFamily: 'var(--font-bangers)', fontSize: '2rem', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>{speaker.name}</h1>
@@ -182,7 +182,7 @@ export default async function SpeakerPage({ params }: Props) {
                   <img
                     src={co.imageUrl ?? '/default-avatar.svg'}
                     alt={co.name}
-                    style={{ width: '3.5rem', height: '3.5rem', objectFit: 'cover', borderRadius: '50%', border: '2px solid #1a1a1a', display: 'block' }}
+                    style={{ width: '3.5rem', height: '3.5rem', objectFit: 'cover', objectPosition: co.imagePosition ?? 'center center', borderRadius: '50%', border: '2px solid #1a1a1a', display: 'block' }}
                   />
                   <span style={{ fontSize: '0.65rem', color: '#444', textAlign: 'center', lineHeight: 1.2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', width: '100%' }}>
                     {co.name}

@@ -143,6 +143,7 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
                         id={quote.speaker?.id ?? null}
                         name={quote.speaker?.name ?? null}
                         imageUrl={quote.speaker?.imageUrl ?? null}
+                        imagePosition={quote.speaker?.imagePosition ?? null}
                         isMatch={isMatch}
                       />
                       <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444' }}>

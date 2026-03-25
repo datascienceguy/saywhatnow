@@ -9,12 +9,21 @@ type Speaker = {
   name: string
   type: string
   imageUrl: string | null
+  imagePosition: string | null
 }
+
+// 3x3 grid of focal point options (CSS object-position values)
+const FOCAL_POINTS = [
+  ['left top',    'center top',    'right top'],
+  ['left center', 'center center', 'right center'],
+  ['left bottom', 'center bottom', 'right bottom'],
+]
 
 export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
   const [name, setName] = useState(speaker.name)
   const [type, setType] = useState(speaker.type)
   const [imageUrl, setImageUrl] = useState(speaker.imageUrl ?? '')
+  const [imagePosition, setImagePosition] = useState(speaker.imagePosition ?? 'center center')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [finding, setFinding] = useState(false)
@@ -25,7 +34,7 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
     const res = await fetch(`/api/admin/speakers/${speaker.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.toUpperCase(), type, imageUrl: imageUrl || null }),
+      body: JSON.stringify({ name: name.toUpperCase(), type, imageUrl: imageUrl || null, imagePosition: imagePosition || null }),
     })
     setSaving(false)
     setStatus(res.ok ? 'Saved.' : 'Error saving.')
@@ -66,7 +75,12 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
     <div className="space-y-5">
       {/* Avatar */}
       <div className="flex items-center gap-4">
-        <img src={preview} alt={name} className="w-20 h-20 rounded-full object-cover bg-gray-800 border border-gray-700" />
+        <div className="relative">
+        <img src={preview} alt={name} className="w-20 h-20 rounded-full object-cover bg-gray-800 border border-gray-700" style={{ objectPosition: imagePosition }} />
+        {imageUrl && (
+          <button onClick={() => setImageUrl('')} className="absolute -top-1 -right-1 w-5 h-5 bg-gray-700 hover:bg-red-700 rounded-full text-xs text-gray-300 hover:text-white flex items-center justify-center transition-colors" title="Remove photo">✕</button>
+        )}
+      </div>
         <div className="space-y-2">
           <button
             onClick={findImage} disabled={finding}
@@ -118,6 +132,29 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
           placeholder="/pictures/homer_simpson.png"
         />
       </div>
+
+      {/* Focal point */}
+      {imageUrl && (
+        <div>
+          <label className="block text-xs text-gray-400 mb-2">Focal Point (click to set where the face is)</label>
+          <div className="flex gap-4 items-start">
+            <div className="grid grid-cols-3 gap-0.5 w-16 shrink-0">
+              {FOCAL_POINTS.map((row, ri) => row.map((pos, ci) => (
+                <button
+                  key={pos}
+                  title={pos}
+                  onClick={() => setImagePosition(pos)}
+                  className={`w-5 h-5 rounded-sm border transition-colors ${imagePosition === pos ? 'bg-yellow-400 border-yellow-400' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'}`}
+                  style={ri === 0 && ci === 0 ? { borderTopLeftRadius: '4px' } : ri === 0 && ci === 2 ? { borderTopRightRadius: '4px' } : ri === 2 && ci === 0 ? { borderBottomLeftRadius: '4px' } : ri === 2 && ci === 2 ? { borderBottomRightRadius: '4px' } : {}}
+                />
+              )))}
+            </div>
+            <div className="w-20 h-20 rounded-full overflow-hidden border border-gray-700 bg-gray-800 shrink-0">
+              <img src={preview} alt={name} className="w-full h-full object-cover" style={{ objectPosition: imagePosition }} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <button

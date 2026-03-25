@@ -7,7 +7,7 @@ interface Quote {
   id: number
   text: string
   sequence: number
-  speaker: { id: number; name: string; imageUrl: string | null } | null
+  speaker: { id: number; name: string; imageUrl: string | null; imagePosition: string | null } | null
 }
 
 interface Props {
@@ -79,6 +79,7 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
                 id={quote.speaker?.id ?? null}
                 name={quote.speaker?.name ?? null}
                 imageUrl={quote.speaker?.imageUrl ?? null}
+                imagePosition={quote.speaker?.imagePosition ?? null}
                 isMatch={!!isMatch}
               />
               <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444', lineHeight: 1.3 }}>

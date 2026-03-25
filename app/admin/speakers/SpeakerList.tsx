@@ -28,6 +28,15 @@ export default function SpeakerList({ speakers: initial }: { speakers: Speaker[]
     return true
   })
 
+  async function removePhoto(e: React.MouseEvent, id: number) {
+    e.preventDefault()
+    await fetch(`/api/admin/speakers/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl: null }),
+    })
+    setSpeakers(prev => prev.map(s => s.id === id ? { ...s, imageUrl: null } : s))
+  }
+
   async function findPhoto(e: React.MouseEvent, id: number) {
     e.preventDefault()
     setFinding(prev => new Set(prev).add(id))
@@ -88,17 +97,19 @@ export default function SpeakerList({ speakers: initial }: { speakers: Speaker[]
               s.type === 'RECURRING' ? 'bg-blue-900 text-blue-300' :
               'bg-gray-800 text-gray-500'
             }`}>{s.type}</span>
-            {!s.imageUrl && (
-              statuses[s.id] === 'not found'
-                ? <span className="text-xs text-red-500">not found</span>
-                : <button
-                    onClick={e => findPhoto(e, s.id)}
-                    disabled={finding.has(s.id)}
-                    className="text-xs px-2 py-0.5 rounded bg-blue-900 text-blue-300 hover:bg-blue-800 disabled:opacity-40 transition-colors shrink-0"
-                  >
-                    {finding.has(s.id) ? '…' : '🔍 find photo'}
-                  </button>
-            )}
+            {s.imageUrl
+              ? <button onClick={e => removePhoto(e, s.id)} className="text-gray-700 hover:text-red-400 text-xs px-1 opacity-0 group-hover:opacity-100 transition-colors" title="Remove photo">✕</button>
+              : (statuses[s.id] === 'not found'
+                  ? <span className="text-xs text-red-500">not found</span>
+                  : <button
+                      onClick={e => findPhoto(e, s.id)}
+                      disabled={finding.has(s.id)}
+                      className="text-xs px-2 py-0.5 rounded bg-blue-900 text-blue-300 hover:bg-blue-800 disabled:opacity-40 transition-colors shrink-0"
+                    >
+                      {finding.has(s.id) ? '…' : '🔍 find photo'}
+                    </button>
+                )
+            }
           </div>
         ))}
       </div>
