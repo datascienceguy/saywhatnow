@@ -1,10 +1,8 @@
 import { Suspense } from 'react'
-import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import SearchForm from './components/SearchForm'
 import SearchResults from './components/SearchResults'
-import GamesMenu from './components/GamesMenu'
-import SignOutButton from './components/SignOutButton'
+import SiteHeader from './components/SiteHeader'
 import { auth } from '@/auth'
 
 interface PageProps {
@@ -26,31 +24,12 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #87CEEB 0%, #B0E0FF 100%)' }}>
-      {/* Header bar */}
-      <header style={{ background: '#FED90F', borderBottom: '4px solid #1a1a1a' }}>
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-end gap-3">
-          <h1
-            style={{ fontFamily: 'var(--font-bangers)', fontSize: '3rem', letterSpacing: '0.05em', color: '#1a1a1a', lineHeight: 1, textShadow: '2px 2px 0 #fff' }}
-          >
-            SayWhatNow
-          </h1>
-          <p style={{ color: '#5a3e00', fontSize: '0.85rem', paddingBottom: '0.3rem' }}>
-            Search quotes from The Simpsons, Futurama &amp; Scrubs
-          </p>
-          <div style={{ marginLeft: 'auto', paddingBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <GamesMenu />
-            {(session?.user as { role?: string })?.role === 'ADMIN' && (
-              <Link
-                href="/admin/staging"
-                style={{ fontSize: '0.8rem', fontWeight: 600, background: '#1a1a1a', color: '#FED90F', padding: '0.25rem 0.6rem', borderRadius: '4px', textDecoration: 'none' }}
-              >
-                Admin
-              </Link>
-            )}
-            <SignOutButton name={session?.user?.name} image={session?.user?.image} />
-          </div>
-        </div>
-      </header>
+      <SiteHeader
+        userName={session?.user?.name}
+        userImage={session?.user?.image}
+        isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
+        subtitle="Search quotes from The Simpsons, Futurama & Scrubs"
+      />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <Suspense>

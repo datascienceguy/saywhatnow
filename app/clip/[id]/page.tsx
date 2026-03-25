@@ -3,9 +3,7 @@ import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import ClipViewer from '@/app/components/ClipViewer'
 import SpeakerLink from '@/app/components/SpeakerLink'
-import BackButton from '@/app/components/BackButton'
-import GamesMenu from '@/app/components/GamesMenu'
-import SignOutButton from '@/app/components/SignOutButton'
+import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
 
 interface Props {
@@ -35,19 +33,13 @@ export default async function ClipPage({ params, searchParams }: Props) {
 
   return (
     <div style={{ background: 'linear-gradient(180deg, #87CEEB 0%, #B0E0FF 100%)', minHeight: '100vh' }}>
-      <header style={{ background: '#FED90F', borderBottom: '4px solid #1a1a1a', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <BackButton />
-        <Link href="/" style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.5rem', letterSpacing: '0.05em', color: '#1a1a1a', textDecoration: 'none' }}>SayWhatNow</Link>
-        <span style={{ color: '#1a1a1a' }}>›</span>
-        <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>
-          {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
-        </span>
-        <GamesMenu />
-        <span style={{ fontSize: '0.75rem', color: '#5a3e00' }}>
-          {clip.startTime} &ndash; {clip.stopTime}
-        </span>
-        <SignOutButton name={session?.user?.name} image={session?.user?.image} />
-      </header>
+      <SiteHeader
+        userName={session?.user?.name}
+        userImage={session?.user?.image}
+        isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
+        back
+        subtitle={`${ep.show.name} — S${ep.season}E${ep.episodeNumber} "${ep.title}" · ${clip.startTime}–${clip.stopTime}`}
+      />
 
       <div style={{ maxWidth: '1100px', margin: '2rem auto', padding: '0 1rem' }}>
         {clip.filePath.endsWith('.mp4') ? (
