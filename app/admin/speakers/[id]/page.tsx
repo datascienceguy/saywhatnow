@@ -15,7 +15,7 @@ export default async function SpeakerEditPage({ params }: Props) {
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-lg mx-auto">
         <div className="mb-6">
-          <a href="/admin/staging" className="text-gray-500 hover:text-gray-300 text-sm">← Admin</a>
+          <a href="/admin/speakers" className="text-gray-500 hover:text-gray-300 text-sm">← Speakers</a>
         </div>
         <h1 className="text-xl font-semibold mb-1">{speaker.name}</h1>
         <p className="text-gray-500 text-sm mb-6">{speaker.show.name}</p>

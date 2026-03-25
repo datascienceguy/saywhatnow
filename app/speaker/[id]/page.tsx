@@ -108,9 +108,6 @@ export default async function SpeakerPage({ params }: Props) {
         <span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.25rem', letterSpacing: '0.05em' }}>{speaker.name}</span>
         <GamesMenu />
         <span style={{ fontSize: '0.8rem', color: '#5a3e00' }}>{speaker.show.name}</span>
-        {(session?.user as { role?: string })?.role === 'ADMIN' && (
-          <Link href={`/admin/speakers/${speaker.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, background: '#1a1a1a', color: '#FED90F', padding: '0.25rem 0.6rem', borderRadius: '4px', textDecoration: 'none' }}>Edit</Link>
-        )}
         <SignOutButton name={session?.user?.name} image={session?.user?.image} />
       </header>
 
