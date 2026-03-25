@@ -38,7 +38,7 @@ function fmtTime(s: number) {
   return `${m}:${sec}`
 }
 
-function deriveClips(quotes: Quote[], splits: Set<number>) {
+function deriveClips(quotes: Quote[], splits: Set<number>, episodeEndTime: number | null) {
   if (quotes.length === 0) return []
   const clips: Array<{ index: number; startTime: number; endTime: number }> = []
   let idx = 1
@@ -52,7 +52,7 @@ function deriveClips(quotes: Quote[], splits: Set<number>) {
     }
   }
   const lastQ = quotes[quotes.length - 1]
-  if (clips.length > 0) clips[clips.length - 1].endTime = (lastQ.endTime ?? lastQ.startTime ?? 0) + 2
+  if (clips.length > 0) clips[clips.length - 1].endTime = episodeEndTime ?? (lastQ.endTime ?? lastQ.startTime ?? 0) + 2
   return clips
 }
 
@@ -86,14 +86,20 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
   const [speakers, setSpeakers] = useState<{ id: number; name: string }[]>([])
   const [showSpeakerMap, setShowSpeakerMap] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [finalizing, setFinalizing] = useState(false)
   const [finalizeLog, setFinalizeLog] = useState<string[]>([])
   const [error, setError] = useState('')
   const [activeQuoteId, setActiveQuoteId] = useState<number | null>(null)
   const [insertingAt, setInsertingAt] = useState<number | null>(null)
   const [newQuote, setNewQuote] = useState({ speaker: '', text: '' })
+  const [episodeEndTime, setEpisodeEndTime] = useState<number | null>(() => {
+    const last = [...episode.clips].sort((a, b) => b.index - a.index)[0]
+    return last ? last.endTime : null
+  })
 
-  const derivedClips = deriveClips(quotes, splits)
+  const derivedClips = deriveClips(quotes, splits, episodeEndTime)
 
   useEffect(() => {
     fetch(`/api/admin/staging/${episode.id}/speakers`)
@@ -109,6 +115,21 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
     const effectiveEnd = active.endTime ?? nextQuote?.startTime ?? Infinity
     setActiveQuoteId(t <= effectiveEnd + 0.5 ? active.id : null)
   }, [currentTime, quotes])
+
+  useEffect(() => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSaveStatus('saving')
+      try {
+        const res = await fetch(`/api/admin/staging/${episode.id}/clips`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clips: deriveClips(quotes, splits, episodeEndTime) }),
+        })
+        setAutoSaveStatus(res.ok ? 'saved' : 'error')
+      } catch { setAutoSaveStatus('error') }
+    }, 2000)
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  }, [splits, episodeEndTime])
 
   const seekTo = (time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time
@@ -163,7 +184,9 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
     setError('')
     const prev = quotes[afterIndex]
     const next = quotes[afterIndex + 1]
-    const sequence = next ? (prev.sequence + next.sequence) / 2 : (prev?.sequence ?? 0) + 1
+    const sequence = afterIndex === -1
+      ? (quotes[0]?.sequence ?? 1) - 1
+      : next ? (prev.sequence + next.sequence) / 2 : (prev?.sequence ?? 0) + 1
     try {
       const res = await fetch(`/api/admin/staging/${episode.id}/quotes`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -171,7 +194,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
       })
       if (!res.ok) throw new Error((await res.json()).error)
       const q = await res.json()
-      setQuotes(prev => { const u = [...prev]; u.splice(afterIndex + 1, 0, q); return u })
+      setQuotes(prev => { const u = [...prev]; u.splice(afterIndex + 1 < 0 ? 0 : afterIndex + 1, 0, q); return u })
       setNewQuote({ speaker: '', text: '' }); setInsertingAt(null)
     } catch (e) { setError(String(e)) }
   }
@@ -199,7 +222,6 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
 
   async function finalize() {
     if (!confirm(`Finalize "${episode.title}"? This will cut ${derivedClips.length} clips with ffmpeg and import to the database. Cannot be undone.`)) return
-    await saveClips()
     setFinalizing(true); setFinalizeLog([]); setError('')
     try {
       const res = await fetch(`/api/admin/staging/${episode.id}/finalize`, { method: 'POST' })
@@ -248,6 +270,9 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
 
         <div className="flex items-center gap-2 shrink-0">
           {error && <span className="text-red-400 text-xs max-w-48 truncate">{error}</span>}
+          {autoSaveStatus === 'saving' && <span className="text-xs text-gray-500">saving…</span>}
+          {autoSaveStatus === 'saved' && <span className="text-xs text-gray-600">✓ saved</span>}
+          {autoSaveStatus === 'error' && <span className="text-xs text-red-500">autosave failed</span>}
           <span className="text-xs text-gray-600 px-2">{derivedClips.length} clips · {quotes.length} quotes</span>
 
           {/* Secondary actions */}
@@ -261,9 +286,6 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
           </div>
 
           {/* Primary actions */}
-          <button onClick={saveClips} disabled={saving} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded text-sm font-medium transition-colors">
-            {saving ? 'Saving…' : 'Save Clips'}
-          </button>
           <button onClick={finalize} disabled={finalizing || derivedClips.length === 0} className="px-3 py-1.5 bg-yellow-400 text-gray-950 hover:bg-yellow-300 disabled:opacity-40 rounded text-sm font-semibold transition-colors">
             {finalizing ? 'Finalizing…' : 'Finalize & Import'}
           </button>
@@ -363,6 +385,20 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
         {/* Right panel — quotes */}
         <div className="w-1/2 overflow-y-auto">
           <div className="p-2">
+            <InlineDivider
+              splitActive={false}
+              nextClipNumber={0}
+              insertingHere={insertingAt === -1}
+              newQuote={newQuote}
+              currentTime={currentTime}
+              showClipSplit={false}
+              onToggleSplit={() => {}}
+              onStartInsert={() => { setInsertingAt(-1); setNewQuote({ speaker: '', text: '' }) }}
+              onCancelInsert={() => { setInsertingAt(null); setNewQuote({ speaker: '', text: '' }) }}
+              onChangeNewQuote={setNewQuote}
+              onAddQuote={() => addQuote(-1)}
+              speakers={speakers}
+            />
             {quotes.map((q, i) => (
               <div key={q.id} ref={el => { if (el) quoteRefs.current.set(q.id, el); else quoteRefs.current.delete(q.id) }}>
                 <QuoteRow
@@ -376,6 +412,18 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                   onSaveEdit={saveQuote}
                   onCancelEdit={() => setEditingQuote(null)}
                   onDelete={deleteQuote}
+                  onSplit={async () => {
+                    const next = quotes[i + 1]
+                    const sequence = next ? (q.sequence + next.sequence) / 2 : q.sequence + 1
+                    const res = await fetch(`/api/admin/staging/${episode.id}/quotes`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ speaker: q.speaker, text: q.text, startTime: currentTime, sequence }),
+                    })
+                    if (res.ok) {
+                      const newQ = await res.json()
+                      setQuotes(prev => { const u = [...prev]; u.splice(i + 1, 0, newQ); return u })
+                    }
+                  }}
                   onStampTime={async (id, t) => {
                     await fetch(`/api/admin/staging/${episode.id}/quotes/${id}`, {
                       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -411,6 +459,26 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                 />
               </div>
             ))}
+            {/* Episode end marker */}
+            <div className="mt-2 flex items-center gap-2 px-2 py-1.5 border border-dashed border-gray-700 rounded group hover:border-gray-500 transition-colors">
+              <span className="text-xs text-gray-600 flex-1">
+                {episodeEndTime != null ? (
+                  <>end of last clip: <button onClick={() => seekTo(episodeEndTime)} className="font-mono text-blue-400 hover:text-blue-300">{fmtTime(episodeEndTime)}</button></>
+                ) : (
+                  <span className="italic">no end marker set — last clip ends 2s after final quote</span>
+                )}
+              </span>
+              <button
+                onClick={() => setEpisodeEndTime(currentTime)}
+                className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-400 hover:text-white transition-colors shrink-0"
+                title={`Set end of last clip @ ${fmtTime(currentTime)}`}
+              >
+                ⏹ end here
+              </button>
+              {episodeEndTime != null && (
+                <button onClick={() => setEpisodeEndTime(null)} className="text-gray-700 hover:text-red-400 text-xs px-1 transition-colors" title="Clear end marker">✕</button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -519,7 +587,7 @@ function InlineDivider({
 }
 
 function QuoteRow({
-  quote, active, currentTime, editingQuote, speakers, onSeek, onEdit, onSaveEdit, onCancelEdit, onDelete, onStampTime,
+  quote, active, currentTime, editingQuote, speakers, onSeek, onEdit, onSaveEdit, onCancelEdit, onDelete, onSplit, onStampTime,
 }: {
   quote: Quote; active: boolean; currentTime: number
   editingQuote: { id: number; speaker: string; text: string } | null
@@ -527,7 +595,7 @@ function QuoteRow({
   onSeek: (t: number) => void
   onEdit: (q: { id: number; speaker: string; text: string }) => void
   onSaveEdit: () => void; onCancelEdit: () => void
-  onDelete: (id: number) => void; onStampTime: (id: number, t: number) => void
+  onDelete: (id: number) => void; onSplit: () => void; onStampTime: (id: number, t: number) => void
 }) {
   const isEditing = editingQuote?.id === quote.id
 
@@ -585,6 +653,7 @@ function QuoteRow({
       {/* Actions */}
       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
         <button onClick={() => onEdit({ id: quote.id, speaker: quote.speaker, text: quote.text })} className="text-gray-600 hover:text-yellow-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title="Edit">✎</button>
+        <button onClick={onSplit} className="text-gray-600 hover:text-blue-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title={`Split @ ${fmtTime(currentTime)}`}>⧉</button>
         <button onClick={() => onDelete(quote.id)} className="text-gray-600 hover:text-red-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title="Delete">✕</button>
       </div>
     </div>

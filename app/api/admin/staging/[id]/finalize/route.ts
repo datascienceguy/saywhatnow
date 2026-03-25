@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { execFileSync } from 'child_process'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs'
+
+const execFileAsync = promisify(execFile)
 
 function findFfmpeg(): string {
   const { execSync } = require('child_process')
@@ -113,7 +116,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       send(`[${stagingClip.index}/${total}] Cutting ${filename} (${duration.toFixed(1)}s, ${clipQuotes.length} lines)…`)
 
       try {
-        execFileSync(ffmpeg, [
+        await execFileAsync(ffmpeg, [
           '-y',
           '-ss', String(stagingClip.startTime),
           '-i', staging.videoPath,
