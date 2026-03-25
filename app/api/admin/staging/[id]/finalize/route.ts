@@ -147,7 +147,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
       for (const sq of clipQuotes) {
         let speakerId: number | null = null
-        const speakerName = sq.speaker.trim()
+        const speakerName = sq.speaker.trim().toUpperCase()
         if (speakerName) {
           if (speakerCache.has(speakerName)) {
             speakerId = speakerCache.get(speakerName)!
