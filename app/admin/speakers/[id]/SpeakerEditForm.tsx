@@ -17,6 +17,7 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
   const [imageUrl, setImageUrl] = useState(speaker.imageUrl ?? '')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [finding, setFinding] = useState(false)
   const [status, setStatus] = useState('')
 
   async function save() {
@@ -28,6 +29,19 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
     })
     setSaving(false)
     setStatus(res.ok ? 'Saved.' : 'Error saving.')
+  }
+
+  async function findImage() {
+    setFinding(true); setStatus('')
+    const res = await fetch(`/api/admin/speakers/${speaker.id}/find-image`, { method: 'POST' })
+    const data = await res.json()
+    setFinding(false)
+    if (res.ok) {
+      setImageUrl(data.imageUrl)
+      setStatus(`Found: ${data.wikiTitle}`)
+    } else {
+      setStatus(data.error || 'Not found')
+    }
   }
 
   async function uploadImage(file: File) {
@@ -53,13 +67,21 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
       {/* Avatar */}
       <div className="flex items-center gap-4">
         <img src={preview} alt={name} className="w-20 h-20 rounded-full object-cover bg-gray-800 border border-gray-700" />
-        <div className="space-y-1">
-          <label className="block text-xs text-gray-400 mb-1">Upload photo</label>
-          <input
-            type="file" accept="image/*"
-            className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-gray-700 file:text-gray-300 file:text-xs hover:file:bg-gray-600 cursor-pointer"
-            onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f) }}
-          />
+        <div className="space-y-2">
+          <button
+            onClick={findImage} disabled={finding}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded text-xs text-white font-medium transition-colors"
+          >
+            {finding ? 'Searching wiki…' : '🔍 Find on Simpsons Wiki'}
+          </button>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Or upload manually</label>
+            <input
+              type="file" accept="image/*"
+              className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-gray-700 file:text-gray-300 file:text-xs hover:file:bg-gray-600 cursor-pointer"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f) }}
+            />
+          </div>
           {uploading && <p className="text-xs text-gray-500">Uploading…</p>}
         </div>
       </div>
