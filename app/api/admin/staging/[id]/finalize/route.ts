@@ -4,6 +4,16 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
 import fs from 'fs'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+
+const r2 = process.env.R2_ACCOUNT_ID ? new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  },
+}) : null
 
 const execFileAsync = promisify(execFile)
 
@@ -130,9 +140,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         throw new Error(`ffmpeg failed on clip ${stagingClip.index}: ${err}`)
       }
 
+      const r2Key = `clips/${showSlug}/${seasonSlug}/${episodeSlug}/${filename}`
+
+      if (r2) {
+        send(`[${stagingClip.index}/${total}] Uploading to R2…`)
+        await r2.send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME!,
+          Key: r2Key,
+          Body: fs.readFileSync(outPath),
+          ContentType: 'video/mp4',
+        }))
+        fs.unlinkSync(outPath)
+        send(`[${stagingClip.index}/${total}] Uploaded ✓`)
+      }
+
       send(`[${stagingClip.index}/${total}] Importing to database…`)
 
-      const filePath = `/clips/${showSlug}/${seasonSlug}/${episodeSlug}/${filename}`
+      const filePath = r2Key
       const clip = await prisma.clip.create({
         data: {
           episodeId: episode.id,

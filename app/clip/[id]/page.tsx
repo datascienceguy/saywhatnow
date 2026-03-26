@@ -44,7 +44,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
       <div style={{ maxWidth: '1100px', margin: '2rem auto', padding: '0 1rem' }}>
         {clip.filePath.endsWith('.mp4') ? (
           <ClipViewer
-            src={clip.filePath}
+            src={process.env.NEXT_PUBLIC_CLIPS_BASE_URL ? `${process.env.NEXT_PUBLIC_CLIPS_BASE_URL}/${clip.filePath.replace(/^\//, '')}` : `/${clip.filePath.replace(/^\//, '')}`}
             startTime={clip.startTime}
             stopTime={clip.stopTime}
             quotes={clip.quotes.map(qt => ({
