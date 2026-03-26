@@ -64,16 +64,33 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    const prefixQuotes = [
+      { speaker: 'CHORUS', text: 'THE SIMPSONS', sequence: 0 },
+      { speaker: 'CHALKBOARD', text: '', sequence: 1 },
+      { speaker: 'HOMER SIMPSON', text: 'AHH!', sequence: 2 },
+    ]
+
     await tx.stagingQuote.createMany({
-      data: quotes.map((q, i) => ({
-        stagingEpisodeId: ep.id,
-        speaker: q.speaker,
-        text: q.text,
-        startTime: q.startTime ?? null,
-        endTime: q.endTime ?? null,
-        matchMethod: q.matchMethod ?? null,
-        sequence: i,
-      })),
+      data: [
+        ...prefixQuotes.map(q => ({
+          stagingEpisodeId: ep.id,
+          speaker: q.speaker,
+          text: q.text,
+          startTime: null,
+          endTime: null,
+          matchMethod: null,
+          sequence: q.sequence,
+        })),
+        ...quotes.map((q, i) => ({
+          stagingEpisodeId: ep.id,
+          speaker: q.speaker,
+          text: q.text,
+          startTime: q.startTime ?? null,
+          endTime: q.endTime ?? null,
+          matchMethod: q.matchMethod ?? null,
+          sequence: i + 3,
+        })),
+      ],
     })
 
     return ep
