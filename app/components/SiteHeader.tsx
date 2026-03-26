@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import GamesMenu from './GamesMenu'
 import SignOutButton from './SignOutButton'
 import BackButton from './BackButton'
@@ -16,11 +17,8 @@ export default function SiteHeader({ userName, userImage, isAdmin, back, subtitl
     <header style={{ background: '#FED90F', borderBottom: '3px solid #1a1a1a' }}>
       {/* Brand row */}
       <div style={{ padding: '0.6rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <Link
-          href="/"
-          style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.75rem', letterSpacing: '0.05em', color: '#1a1a1a', textDecoration: 'none', lineHeight: 1, flexShrink: 0 }}
-        >
-          SayWhatNow
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <Image src="/pictures/saywhatnow.jpg" alt="SayWhatNow" width={120} height={40} style={{ objectFit: 'contain', display: 'block', mixBlendMode: 'multiply' }} />
         </Link>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
           <GamesMenu />
