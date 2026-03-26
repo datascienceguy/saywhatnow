@@ -590,78 +590,21 @@ def load_env(project_root: Path) -> dict:
 
 
 def fetch_episode_metadata(season: int, episode: int) -> dict:
-    """Fetch episode metadata from thesimpsonsapi.com. Paginates to find the right episode."""
+    """Fetch episode metadata from thesimpsonsapi.com. Returns {title, air_date}."""
     import urllib.request
+    url = f"https://thesimpsonsapi.com/api/episodes?season={season}&episode={episode}"
     print(f"\nFetching episode metadata for S{season:02d}E{episode:02d}...")
-    page = 1
-    ep_count_in_season = 0
-    while True:
-        url = f"https://thesimpsonsapi.com/api/episodes?page={page}"
-        with urllib.request.urlopen(url) as r:
-            data = json.loads(r.read())
-        results = data.get("results", [])
-        if not results:
-            raise ValueError(f"No episode found for S{season:02d}E{episode:02d}")
-        for ep in results:
-            if ep.get("season") != season:
-                if ep_count_in_season > 0:
-                    raise ValueError(f"Season {season} only has {ep_count_in_season} episodes")
-                continue
-            ep_count_in_season += 1
-            if ep_count_in_season == episode:
-                title = ep.get("name", "")
-                air_date = ep.get("airdate") or None
-                print(f"  Title    : {title}")
-                print(f"  Air date : {air_date}")
-                return {"title": title, "air_date": air_date, "production_code": None}
-        if not data.get("next"):
-            raise ValueError(f"No episode found for S{season:02d}E{episode:02d}")
-        page += 1
-
-
-def seed_staging_clips(project_root: Path, ep_id: int, srt_path: str) -> None:
-    """Detect clip boundaries from SRT and POST them to the staging clips API."""
-    import urllib.request
-
-    srt = parse_srt(srt_path)
-    if not srt:
-        print("  No SRT entries — skipping clip seeding.")
-        return
-
-    clips = clips_from_srt(
-        srt,
-        min_dur=20.0,
-        max_dur=90.0,
-        gap_threshold=3.0,
-        buffer=0.3,
-    )
-
-    if not clips:
-        print("  No clips detected from SRT.")
-        return
-
-    print(f"  Detected {len(clips)} clips from SRT gaps")
-
-    payload = json.dumps({
-        "clips": [
-            {"index": i + 1, "startTime": round(start, 3), "endTime": round(end, 3)}
-            for i, (start, end) in enumerate(clips)
-        ]
-    }).encode()
-
-    env = load_env(project_root)
-    base_url = env.get("AUTH_URL", "http://localhost:3000").rstrip("/")
-    url = f"{base_url}/api/admin/staging/{ep_id}/clips"
-
-    headers = {"Content-Type": "application/json"}
-    secret = env.get("INTERNAL_API_SECRET")
-    if secret:
-        headers["x-internal-secret"] = secret
-
-    req = urllib.request.Request(url, data=payload, headers=headers, method="PUT")
-    with urllib.request.urlopen(req) as r:
-        r.read()
-    print(f"  Clips seeded ✓")
+    with urllib.request.urlopen(url) as r:
+        data = json.loads(r.read())
+    results = data.get("results", [])
+    if not results:
+        raise ValueError(f"No episode found for S{season:02d}E{episode:02d}")
+    ep = results[0]
+    title = ep.get("name", "")
+    air_date = ep.get("airdate") or None
+    print(f"  Title    : {title}")
+    print(f"  Air date : {air_date}")
+    return {"title": title, "air_date": air_date, "production_code": None}
 
 
 def create_staging_episode(
@@ -984,14 +927,6 @@ def main():
                     video_path=mp4_path,
                     quotes_path=str(quotes_path),
                 )
-                # Seed clip boundaries from SRT
-                if srt_path:
-                    print(f"\nSeeding clip boundaries from SRT...")
-                    try:
-                        seed_staging_clips(project_root, ep_id, srt_path)
-                    except Exception as e:
-                        print(f"  WARNING: clip seeding failed: {e}")
-
                 base_url = env.get("AUTH_URL", "http://localhost:3000").rstrip("/")
                 print(f"\n✓ Episode ready for editing:")
                 print(f"  {base_url}/admin/staging/{ep_id}")
