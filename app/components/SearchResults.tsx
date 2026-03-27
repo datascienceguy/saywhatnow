@@ -121,7 +121,6 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
                 <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a' }}>
                   {ep.show.name} &mdash; S{ep.season}E{ep.episodeNumber} &ldquo;{ep.title}&rdquo;
                 </span>
-                <span style={{ fontSize: '0.75rem', color: '#5a3e00' }}>{clip.startTime} &ndash; {clip.stopTime}</span>
               </div>
               <div>
                 {visibleQuotes.map((quote, i) => {

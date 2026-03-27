@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { Suspense } from 'react'
 import prisma from '@/lib/prisma'
 import SearchForm from './components/SearchForm'

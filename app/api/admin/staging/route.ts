@@ -3,6 +3,15 @@ import { prisma } from '@/lib/prisma'
 import path from 'path'
 import fs from 'fs'
 
+// GET /api/admin/staging?basename=s01e03 — look up staging episode by basename
+export async function GET(req: NextRequest) {
+  const basename = req.nextUrl.searchParams.get('basename')
+  if (!basename) return NextResponse.json({ error: 'basename required' }, { status: 400 })
+  const ep = await prisma.stagingEpisode.findUnique({ where: { basename } })
+  if (!ep) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json(ep)
+}
+
 // POST /api/admin/staging — create a new staging episode and seed quotes from JSON
 export async function POST(req: NextRequest) {
   const body = await req.json()

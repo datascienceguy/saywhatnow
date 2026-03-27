@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import prisma from '@/lib/prisma'
@@ -38,7 +40,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
         back
-        subtitle={`${ep.show.name} — S${ep.season}E${ep.episodeNumber} "${ep.title}" · ${clip.startTime}–${clip.stopTime}`}
+        subtitle={`${ep.show.name} — S${ep.season}E${ep.episodeNumber} "${ep.title}"`}
       />
 
       <div style={{ maxWidth: '1100px', margin: '2rem auto', padding: '0 1rem' }}>
@@ -51,7 +53,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
               id: qt.id,
               text: qt.text,
               sequence: qt.sequence,
-              speaker: qt.speaker ? { id: qt.speaker.id, name: qt.speaker.name, imageUrl: qt.speaker.imageUrl } : null,
+              speaker: qt.speaker ? { id: qt.speaker.id, name: qt.speaker.name, imageUrl: qt.speaker.imageUrl, imagePosition: qt.speaker.imagePosition } : null,
             }))}
             matchQ={q}
           />

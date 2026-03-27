@@ -313,7 +313,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
               {([-1, -0.1, 0.1, 1] as const).map(delta => (
                 <button
                   key={delta}
-                  onClick={() => seekTo(Math.max(0, Math.min(duration, currentTime + delta)))}
+                  onClick={() => seekTo(Math.max(0, currentTime + delta))}
                   className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs font-mono text-gray-400 hover:text-white transition-colors"
                 >
                   {delta > 0 ? `+${delta}s` : `${delta}s`}
