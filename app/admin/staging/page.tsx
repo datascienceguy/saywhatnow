@@ -6,7 +6,7 @@ import Link from 'next/link'
 export default async function StagingIndexPage() {
   const episodes = await prisma.stagingEpisode.findMany({
     include: { show: true },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: [{ season: 'asc' }, { episodeNumber: 'asc' }],
   })
 
   const draft = episodes.filter(e => e.status === 'DRAFT')

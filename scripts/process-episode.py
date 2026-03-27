@@ -212,8 +212,6 @@ def parse_transcript(path: str) -> list[dict]:
             dialogue = m.group(2).strip()
             if dialogue:
                 current_speaker = emit_with_inline_splits(dialogue, current_speaker)
-        elif current_speaker and text:
-            current_speaker = emit_with_inline_splits(text, current_speaker)
 
     return entries
 
@@ -399,6 +397,7 @@ def clips_from_srt(
 # PySceneDetect fallback
 # ---------------------------------------------------------------------------
 
+
 def detect_scenes(mkv_path: str, threshold: float) -> list[tuple[float, float]]:
     """Run PySceneDetect and return (start, end) tuples in seconds."""
     try:
@@ -536,7 +535,7 @@ def convert_full_mp4(mkv_path: str, output_dir: str, basename: str) -> str:
         [
             find_ffmpeg("ffmpeg"), "-y",
             "-i", mkv_path,
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-c:v", "copy",
             "-c:a", "aac", "-b:a", "192k", "-ac", "2",
             "-progress", "pipe:1", "-nostats",
             out_path,
@@ -805,6 +804,8 @@ def main():
     parser.add_argument("--episode", type=int, default=None, help="Episode number (e.g. 17)")
     parser.add_argument("--output-dir", default=None,
                         help="Directory for output (default: ./clip_prep/<basename>)")
+    parser.add_argument("--regen-quotes", action="store_true",
+                        help="Delete cached quotes JSON, regenerate from transcript+SRT, and replace quotes in existing staging episode")
     parser.add_argument("--no-transcript", action="store_true",
                         help="Skip transcript download")
     parser.add_argument("--no-download", action="store_true",
@@ -903,6 +904,9 @@ def main():
 
         # Step 5: generate quotes JSON
         quotes_path = episode_dir / f"{basename}-quotes.json"
+        if args.regen_quotes and quotes_path.exists():
+            print(f"\n--regen-quotes: deleting cached quotes JSON...")
+            quotes_path.unlink()
         if quotes_path.exists():
             print(f"\nQuotes JSON already exists: {quotes_path}")
         elif srt_path and transcript_path.exists():
@@ -913,7 +917,36 @@ def main():
             if not transcript_path.exists():
                 print(f"WARNING: Transcript not found at {transcript_path}")
 
-        # Step 6: create StagingEpisode in DB
+        # Step 6: create or update StagingEpisode in DB
+        if args.regen_quotes and quotes_path.exists():
+            import urllib.request as _ur
+            env = load_env(project_root)
+            base_url = env.get("AUTH_URL", "http://localhost:3000").rstrip("/")
+            secret = env.get("INTERNAL_API_SECRET", "")
+            # Look up existing staging episode by basename
+            try:
+                req = _ur.Request(
+                    f"{base_url}/api/admin/staging?basename={basename}",
+                    headers={"x-internal-secret": secret},
+                )
+                with _ur.urlopen(req) as r:
+                    ep_data = json.loads(r.read())
+                ep_id = ep_data["id"]
+                print(f"\n--regen-quotes: replacing quotes for staging episode id={ep_id}...")
+                put_req = _ur.Request(
+                    f"{base_url}/api/admin/staging/{ep_id}/quotes",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json", "x-internal-secret": secret},
+                    method="PUT",
+                )
+                with _ur.urlopen(put_req) as r:
+                    result = json.loads(r.read())
+                print(f"  ✓ Replaced quotes: {result.get('total')} total")
+                print(f"  {base_url}/admin/staging/{ep_id}")
+            except Exception as e:
+                print(f"  WARNING: Could not replace quotes: {e}")
+            return
+
         if quotes_path.exists() and ep_meta.get("title"):
             try:
                 ep_id = create_staging_episode(
@@ -928,6 +961,7 @@ def main():
                     quotes_path=str(quotes_path),
                 )
                 base_url = env.get("AUTH_URL", "http://localhost:3000").rstrip("/")
+
                 print(f"\n✓ Episode ready for editing:")
                 print(f"  {base_url}/admin/staging/{ep_id}")
             except Exception as e:
