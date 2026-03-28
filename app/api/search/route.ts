@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       distinct: ['clipId'],
     })
     const ids = new Set(rows.filter(r => quoteMatchesToken(r.text, token)).map(r => r.clipId))
-    clipIdSet = clipIdSet === null ? ids : new Set([...clipIdSet].filter(id => ids.has(id)))
+    if (clipIdSet === null) { clipIdSet = ids } else { const prev: Set<number> = clipIdSet; clipIdSet = new Set([...prev].filter(id => ids.has(id))) }
     if (clipIdSet.size === 0) break
   }
 
