@@ -185,8 +185,8 @@ All episode files stored under `clip_prep/{basename}/`.
 4. **Review speakers** — Go to `/admin/speakers`, fix any auto-created duplicates or misspellings, set speaker types, add photos
 5. **Spot-check** — Search a quote from the episode on the main site; confirm video plays and clips look right
 6. **Sync to Fly.io** — Run from PowerShell in the project root:
-   ```powershell
-   .\scripts\sync-db-to-fly.ps1
+   ```
+   .\scripts\sync-db-to-fly.bat
    ```
 
 ---
