@@ -13,17 +13,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const searchName = toTitleCase(speaker.name)
 
-  // First try direct title lookup
-  let wikiImageUrl = await fetchWikiImage(searchName)
-
-  // If not found, search the wiki for the closest matching page
-  if (!wikiImageUrl) {
-    const searchRes = await fetch(`https://simpsons.fandom.com/api.php?action=opensearch&search=${encodeURIComponent(searchName)}&limit=1&format=json`)
-    if (searchRes.ok) {
-      const [, titles] = await searchRes.json()
-      if (titles?.[0]) wikiImageUrl = await fetchWikiImage(titles[0])
-    }
-  }
+  const wikiImageUrl = await fetchWikiImage(searchName)
 
   if (!wikiImageUrl) {
     return NextResponse.json({ error: `No image found for "${searchName}" on Simpsons wiki` }, { status: 404 })
