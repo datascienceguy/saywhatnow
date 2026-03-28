@@ -1,6 +1,6 @@
 # SayWhatNow — Architecture & Codebase Guide
 
-A quote-search web app for TV shows (The Simpsons, Futurama, Scrubs). Users search for dialogue across episodes; results surface the full clip context with matching lines highlighted.
+A quote-search web app for TV shows (The Simpsons, Scrubs). Users search for dialogue across episodes; results surface the full clip context with matching lines highlighted.
 
 The new app is a modern rewrite of a legacy PHP/MySQL app at `C:\Users\dxm27\Documents\dev\saywhatnow`. Reference that app for existing feature behavior.
 
@@ -174,6 +174,20 @@ Steps (each auto-skipped if output already exists):
 6. Match transcript to SRT, generate quotes, POST to staging API
 
 All episode files stored under `clip_prep/{basename}/`.
+
+---
+
+## Adding a New Episode — Full Workflow
+
+1. **Import** — `uv run scripts/process-episode.py <season> <episode>` (downloads MKV, transcript, stages quotes)
+2. **Split clips** — Open `/admin/staging/[id]`, review quotes, add clip boundaries with the video player
+3. **Finalize** — Click Finalize; ffmpeg cuts clips, uploads to R2, imports clips/quotes/speakers to DB
+4. **Review speakers** — Go to `/admin/speakers`, fix any auto-created duplicates or misspellings, set speaker types, add photos
+5. **Spot-check** — Search a quote from the episode on the main site; confirm video plays and clips look right
+6. **Sync to Fly.io** — Run from PowerShell in the project root:
+   ```powershell
+   .\scripts\sync-db-to-fly.ps1
+   ```
 
 ---
 
