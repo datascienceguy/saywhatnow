@@ -104,7 +104,7 @@ export default function SearchForm({ shows, episodes, speakers }: Props) {
           Search
         </button>
       </div>
-      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="search-filters">
         <select value={showId} onChange={e => handleShowChange(e.target.value)} style={filterStyle}>
           <option value="">All Shows</option>
           {shows.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

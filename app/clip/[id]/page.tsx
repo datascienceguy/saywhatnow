@@ -7,6 +7,7 @@ import ClipViewer from '@/app/components/ClipViewer'
 import SpeakerLink from '@/app/components/SpeakerLink'
 import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
+import { toTitleCase } from '@/lib/display'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -40,7 +41,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
         back
-        subtitle={`${ep.show.name} — S${ep.season}E${ep.episodeNumber} "${ep.title}"`}
+        subtitle={`${ep.show.name} — S${ep.season}E${ep.episodeNumber} "${toTitleCase(ep.title)}"`}
       />
 
       <div style={{ maxWidth: '1100px', margin: '2rem auto', padding: '0 1rem' }}>
@@ -73,6 +74,7 @@ export default async function ClipPage({ params, searchParams }: Props) {
                       imageUrl={quote.speaker?.imageUrl ?? null}
                       imagePosition={quote.speaker?.imagePosition ?? null}
                       isMatch={!!isMatch}
+                      compact
                     />
                     <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444' }}>
                       {quote.text}

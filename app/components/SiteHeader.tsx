@@ -14,18 +14,16 @@ interface Props {
 
 export default function SiteHeader({ userName, userImage, isAdmin, back, subtitle }: Props) {
   return (
-    <header style={{ background: '#FED90F', borderBottom: '3px solid #1a1a1a', padding: '0.4rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+    <header className="site-header">
       {back && <BackButton />}
       <Link href="/" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         <Image src="/pictures/saywhatnow.jpg" alt="SayWhatNow" width={80} height={28} style={{ objectFit: 'contain', display: 'block', mixBlendMode: 'multiply' }} />
       </Link>
       {subtitle && (
-        <>
-          <span style={{ color: '#a07800', fontSize: '0.85rem' }}>›</span>
-          <span style={{ fontSize: '0.85rem', color: '#3a2800', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-            {subtitle}
-          </span>
-        </>
+        <div className="site-header-subtitle">
+          <span className="chevron" style={{ color: '#a07800', fontSize: '0.85rem', flexShrink: 0 }}>›</span>
+          <span style={{ fontSize: '0.85rem', color: '#3a2800' }}>{subtitle}</span>
+        </div>
       )}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
         <GamesMenu />

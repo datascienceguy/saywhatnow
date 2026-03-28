@@ -5,6 +5,7 @@ import Link from 'next/link'
 import prisma from '@/lib/prisma'
 import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
+import { toTitleCase } from '@/lib/display'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -101,20 +102,20 @@ export default async function SpeakerPage({ params }: Props) {
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
         back
-        subtitle={`${speaker.name} · ${speaker.show.name}`}
+        subtitle={`${toTitleCase(speaker.name)} · ${speaker.show.name}`}
       />
 
       <div style={{ maxWidth: '720px', margin: '2rem auto', padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
         {/* Profile card */}
-        <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.25rem' }}>
+        <div className="speaker-profile-card" style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.25rem' }}>
           <img
             src={speaker.imageUrl ?? '/default-avatar.svg'}
             alt={speaker.name}
             style={{ width: '6rem', height: '6rem', objectFit: 'cover', objectPosition: speaker.imagePosition ?? 'center center', borderRadius: '50%', border: '3px solid #1a1a1a', flexShrink: 0 }}
           />
           <div>
-            <h1 style={{ fontFamily: 'var(--font-bangers)', fontSize: '2rem', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>{speaker.name}</h1>
+            <h1 style={{ fontFamily: 'var(--font-bangers)', fontSize: '2rem', letterSpacing: '0.05em', margin: 0, lineHeight: 1 }}>{toTitleCase(speaker.name)}</h1>
             <p style={{ margin: '0.3rem 0 0', color: '#555', fontSize: '0.875rem' }}>
               {speaker.show.name} &mdash; <span style={{ textTransform: 'capitalize', color: '#888' }}>{speaker.type.toLowerCase().replace('_', ' ')}</span>
             </p>
@@ -141,9 +142,9 @@ export default async function SpeakerPage({ params }: Props) {
               <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
                 Most Repeated Quote <span style={{ color: '#bbb', fontWeight: 400 }}>({mostRepeatedCount}×)</span>
               </div>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{mostRepeatedQuote.text}&rdquo;</p>
+              <p style={{ margin: 0, fontSize: '0.8125rem', color: '#444', fontStyle: 'normal', letterSpacing: '0.015em', fontWeight: 400 }}>&ldquo;{mostRepeatedQuote.text}&rdquo;</p>
               <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
-                First in S{mostRepeatedQuote.episode.season}E{mostRepeatedQuote.episode.episodeNumber} &mdash; {mostRepeatedQuote.episode.title}
+                First in S{mostRepeatedQuote.episode.season}E{mostRepeatedQuote.episode.episodeNumber} &mdash; {toTitleCase(mostRepeatedQuote.episode.title)}
               </p>
             </div>
           </Link>
@@ -153,9 +154,9 @@ export default async function SpeakerPage({ params }: Props) {
         <Link href={`/clip/${randomQuote.clipId}`} style={{ textDecoration: 'none' }}>
           <div style={{ background: '#FFFBCC', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Random Quote</div>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: '#1a1a1a', fontStyle: 'italic' }}>&ldquo;{randomQuote.text}&rdquo;</p>
+            <p style={{ margin: 0, fontSize: '0.8125rem', color: '#444', fontStyle: 'normal', letterSpacing: '0.015em', fontWeight: 400 }}>&ldquo;{randomQuote.text}&rdquo;</p>
             <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#888' }}>
-              S{randomQuote.episode.season}E{randomQuote.episode.episodeNumber} &mdash; {randomQuote.episode.title}
+              S{randomQuote.episode.season}E{randomQuote.episode.episodeNumber} &mdash; {toTitleCase(randomQuote.episode.title)}
             </p>
           </div>
         </Link>

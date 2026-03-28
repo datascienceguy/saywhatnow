@@ -47,16 +47,14 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
   }
 
   return (
-    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      {/* Video column */}
-      <div style={{ flex: '0 0 auto', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: '#000', display: 'flex', justifyContent: 'center' }}>
-        <video ref={videoRef} controls autoPlay style={{ display: 'block', maxWidth: '100%', maxHeight: '360px' }}>
+    <div className="clip-viewer">
+      <div className="clip-video-wrap">
+        <video ref={videoRef} controls autoPlay>
           <source src={src} type="video/mp4" />
         </video>
       </div>
 
-      {/* Quotes column */}
-      <div style={{ flex: '1 1 280px', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a', background: 'white', maxHeight: '360px', overflowY: 'auto' }}>
+      <div className="clip-quotes-wrap">
         {quotes.map((quote, i) => {
           const isMatch = lowerQ && quote.text.toLowerCase().includes(lowerQ)
           return (
@@ -68,7 +66,6 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                fontSize: '0.8rem',
                 background: isMatch ? '#FFFBCC' : i % 2 === 0 ? '#fff' : '#fafafa',
                 borderTop: i > 0 ? '1px solid #e5e5e5' : undefined,
                 cursor: 'pointer',
@@ -81,8 +78,9 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
                 imageUrl={quote.speaker?.imageUrl ?? null}
                 imagePosition={quote.speaker?.imagePosition ?? null}
                 isMatch={!!isMatch}
+                compact
               />
-              <span style={{ fontWeight: isMatch ? 600 : 400, color: isMatch ? '#1a1a1a' : '#444', lineHeight: 1.3 }}>
+              <span style={{ fontWeight: isMatch ? 500 : 400, color: isMatch ? '#1a1a1a' : '#666', lineHeight: 1.3, fontSize: '0.8rem', letterSpacing: '0.01em' }}>
                 {quote.text}
               </span>
             </div>
