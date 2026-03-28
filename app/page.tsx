@@ -30,7 +30,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         userName={session?.user?.name}
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
-        subtitle="Search quotes from The Simpsons, Futurama & Scrubs"
+        subtitle="Search quotes from The Simpsons & Scrubs"
       />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
