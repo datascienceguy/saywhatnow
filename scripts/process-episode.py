@@ -589,21 +589,39 @@ def load_env(project_root: Path) -> dict:
 
 
 def fetch_episode_metadata(season: int, episode: int) -> dict:
-    """Fetch episode metadata from thesimpsonsapi.com. Returns {title, air_date}."""
+    """Fetch episode metadata from thesimpsonsapi.com.
+    The API ignores query params, so we paginate through all episodes
+    counting by season until we find the target.
+    """
     import urllib.request
-    url = f"https://thesimpsonsapi.com/api/episodes?season={season}&episode={episode}"
     print(f"\nFetching episode metadata for S{season:02d}E{episode:02d}...")
-    with urllib.request.urlopen(url) as r:
-        data = json.loads(r.read())
-    results = data.get("results", [])
-    if not results:
-        raise ValueError(f"No episode found for S{season:02d}E{episode:02d}")
-    ep = results[0]
-    title = ep.get("name", "")
-    air_date = ep.get("airdate") or None
-    print(f"  Title    : {title}")
-    print(f"  Air date : {air_date}")
-    return {"title": title, "air_date": air_date, "production_code": None}
+
+    page = 1
+    current_season = 1
+    current_ep = 0
+
+    while True:
+        url = f"https://thesimpsonsapi.com/api/episodes?page={page}&limit=25"
+        with urllib.request.urlopen(url) as r:
+            data = json.loads(r.read())
+        results = data.get("results", [])
+        if not results:
+            raise ValueError(f"No episode found for S{season:02d}E{episode:02d} — ran out of pages")
+
+        for ep in results:
+            ep_season = ep.get("season", current_season)
+            if ep_season != current_season:
+                current_season = ep_season
+                current_ep = 0
+            current_ep += 1
+            if current_season == season and current_ep == episode:
+                title = ep.get("name", "")
+                air_date = ep.get("airdate") or None
+                print(f"  Title    : {title}")
+                print(f"  Air date : {air_date}")
+                return {"title": title, "air_date": air_date, "production_code": None}
+
+        page += 1
 
 
 def create_staging_episode(
