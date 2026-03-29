@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["playwright", "beautifulsoup4"]
+# dependencies = ["playwright", "beautifulsoup4", "anthropic"]
 # ///
 """
 Full episode import pipeline — downloads, converts, matches quotes, and creates
@@ -17,7 +17,8 @@ Steps (auto-skipped if output files already exist):
   4. Convert MKV to full MP4              → clip_prep/s01e03/s01e03.mp4
   5. Fetch episode metadata from thesimpsonsapi.com
   6. Match transcript to SRT timestamps   → clip_prep/s01e03/s01e03-quotes.json
-  7. Create StagingEpisode in DB          → /admin/staging/{id}
+  7. AI clip boundary suggestion (Claude) → clip_prep/s01e03/s01e03-ai-clips.json
+  8. Create StagingEpisode in DB + push AI clips → /admin/staging/{id}
 
 Requirements:
   playwright, beautifulsoup4  — pip/uv dependencies
@@ -503,6 +504,144 @@ def cut_clips(
 
 
 # ---------------------------------------------------------------------------
+# AI clip boundary suggestion via Claude
+# ---------------------------------------------------------------------------
+
+_AI_CLIP_PROMPT = """\
+You are segmenting a Simpsons episode transcript into video clips for a searchable clip library.
+
+Given the transcript below, identify logical clip boundaries and return ONLY a JSON array — no explanation, no markdown, no preamble.
+
+RULES:
+- First clip must start at the very beginning and end after the couch gag completes
+- Last clip must end before the closing credits begin
+- Cut on story logic, not time — each clip should be a self-contained scene or beat
+- A clip ends when the scene genuinely changes: location shift, significant time jump, or a complete story beat that resolves before something new begins
+- Do NOT cut within a continuous scene just because it's getting long — only cut if there's a real narrative break
+- Do NOT cut between lines that are part of the same exchange or joke
+- A typical episode will produce 15–25 clips; some long scenes may be a single clip
+- Only split a long scene if there is a clear mid-scene beat that fully resolves before the next one begins — not just a topic shift
+
+OUTPUT FORMAT — return only this, nothing else:
+[
+  {{
+    "clip_number": 1,
+    "start_time": "00:00:00",
+    "end_time": "00:01:45",
+    "description": "Cold open through couch gag",
+    "duration_seconds": 105
+  }},
+  ...
+]
+
+TRANSCRIPT:
+{transcript}"""
+
+
+def _hhmmss_to_seconds(s: str) -> float:
+    """Parse HH:MM:SS, MM:SS, or SS to seconds."""
+    parts = s.strip().split(":")
+    if len(parts) == 3:
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+    if len(parts) == 2:
+        return int(parts[0]) * 60 + float(parts[1])
+    return float(s)
+
+
+def suggest_clip_boundaries(quotes_path: Path, env: dict, ai_clips_path: Path) -> list[dict] | None:
+    """Call Claude to suggest clip boundaries. Returns list of {index, startTime, endTime} or None."""
+    if ai_clips_path.exists():
+        print(f"\nAI clips already exist: {ai_clips_path}")
+        data = json.loads(ai_clips_path.read_text(encoding="utf-8"))
+        return data.get("clips")
+
+    api_key = env.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("\nSkipping AI clip suggestion: ANTHROPIC_API_KEY not set in .env.local")
+        return None
+
+    try:
+        import anthropic as _anthropic
+    except ImportError:
+        print("\nSkipping AI clip suggestion: anthropic package not installed.")
+        return None
+
+    quotes = json.loads(quotes_path.read_text(encoding="utf-8")).get("quotes", [])
+    lines = []
+    for q in quotes:
+        t = q.get("startTime")
+        if t is None:
+            continue
+        h, m, s = int(t // 3600), int((t % 3600) // 60), t % 60
+        lines.append(f"[{h:02d}:{m:02d}:{s:05.2f}] {q.get('speaker', '')}: {q.get('text', '')}")
+
+    if not lines:
+        print("\nSkipping AI clip suggestion: no timestamped quotes found.")
+        return None
+
+    print(f"\n=== AI clip boundary suggestion ===")
+    print(f"  Sending {len(lines)} lines to Claude ({len(''.join(lines))//1000}k chars)...")
+
+    transcript = "\n".join(lines)
+    prompt = _AI_CLIP_PROMPT.format(transcript=transcript)
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = message.content[0].text.strip()
+
+    # Extract JSON array from response (handle optional ```json``` fences)
+    start_idx = raw.find("[")
+    end_idx = raw.rfind("]") + 1
+    if start_idx == -1 or end_idx == 0:
+        print(f"  ERROR: Could not find JSON array in response:\n{raw[:500]}")
+        return None
+
+    try:
+        suggestions = json.loads(raw[start_idx:end_idx])
+    except json.JSONDecodeError as e:
+        print(f"  ERROR: Failed to parse Claude response as JSON: {e}")
+        print(f"  Raw response (first 500 chars): {raw[:500]}")
+        return None
+
+    clips = [
+        {
+            "index": i,
+            "startTime": _hhmmss_to_seconds(c["start_time"]),
+            "endTime": _hhmmss_to_seconds(c["end_time"]),
+        }
+        for i, c in enumerate(suggestions, 1)
+    ]
+
+    ai_clips_path.write_text(
+        json.dumps({"suggestions": suggestions, "clips": clips}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    print(f"  Got {len(clips)} clips  (avg {sum(c['endTime']-c['startTime'] for c in clips)/len(clips):.0f}s each)")
+    print(f"  Saved: {ai_clips_path}")
+    return clips
+
+
+def push_clips_to_staging(base_url: str, ep_id: int, clips: list[dict], secret: str) -> None:
+    """PUT clip boundaries to the staging API."""
+    import urllib.request
+    payload = json.dumps({"clips": clips}).encode()
+    req = urllib.request.Request(
+        f"{base_url}/api/admin/staging/{ep_id}/clips",
+        data=payload,
+        headers={"Content-Type": "application/json", "x-internal-secret": secret},
+        method="PUT",
+    )
+    with urllib.request.urlopen(req) as r:
+        json.loads(r.read())
+    print(f"  ✓ Pushed {len(clips)} clip boundaries to staging episode {ep_id}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -846,6 +985,10 @@ def main():
                         help="Skip SRT-based clipping, use PySceneDetect instead")
     parser.add_argument("--no-subtitles", action="store_true",
                         help="Skip subtitle extraction")
+    parser.add_argument("--no-ai-clips", action="store_true",
+                        help="Skip AI clip boundary suggestion")
+    parser.add_argument("--regen-ai-clips", action="store_true",
+                        help="Delete cached AI clips JSON and re-run Claude suggestion")
     parser.add_argument("--threshold", type=float, default=30.0,
                         help="PySceneDetect threshold (default: 30, lower = more cuts)")
     parser.add_argument("--clips", default=None,
@@ -935,7 +1078,16 @@ def main():
             if not transcript_path.exists():
                 print(f"WARNING: Transcript not found at {transcript_path}")
 
-        # Step 6: create or update StagingEpisode in DB
+        # Step 6: AI clip boundary suggestion
+        ai_clips_path = episode_dir / f"{basename}-ai-clips.json"
+        if args.regen_ai_clips and ai_clips_path.exists():
+            print(f"\n--regen-ai-clips: deleting cached AI clips...")
+            ai_clips_path.unlink()
+        ai_clips = None
+        if not args.no_ai_clips and quotes_path.exists():
+            ai_clips = suggest_clip_boundaries(quotes_path, env, ai_clips_path)
+
+        # Step 7: create or update StagingEpisode in DB
         if args.regen_quotes and quotes_path.exists():
             import urllib.request as _ur
             env = load_env(project_root)
@@ -966,6 +1118,13 @@ def main():
             return
 
         if quotes_path.exists() and ep_meta.get("title"):
+            import urllib.error as _ue
+            import urllib.request as _ur
+
+            base_url = env.get("AUTH_URL", "http://localhost:3000").rstrip("/")
+            secret = env.get("INTERNAL_API_SECRET", "")
+            ep_id = None
+
             try:
                 ep_id = create_staging_episode(
                     project_root=project_root,
@@ -978,13 +1137,35 @@ def main():
                     video_path=mp4_path,
                     quotes_path=str(quotes_path),
                 )
-                base_url = env.get("AUTH_URL", "http://localhost:3000").rstrip("/")
-
-                print(f"\n✓ Episode ready for editing:")
-                print(f"  {base_url}/admin/staging/{ep_id}")
+            except _ue.HTTPError as e:
+                if e.code == 409:
+                    # Staging episode already exists — look up its id
+                    try:
+                        req = _ur.Request(
+                            f"{base_url}/api/admin/staging?basename={basename}",
+                            headers={"x-internal-secret": secret},
+                        )
+                        with _ur.urlopen(req) as r:
+                            ep_id = json.loads(r.read())["id"]
+                        print(f"  Staging episode already exists (id={ep_id})")
+                    except Exception as lookup_err:
+                        print(f"\nWARNING: Could not look up existing staging episode: {lookup_err}")
+                else:
+                    print(f"\nWARNING: Could not create staging episode: {e}")
+                    print(f"  Make sure the dev server is running, then go to /admin/staging/new")
             except Exception as e:
                 print(f"\nWARNING: Could not create staging episode: {e}")
                 print(f"  Make sure the dev server is running, then go to /admin/staging/new")
+
+            if ep_id is not None:
+                if ai_clips:
+                    try:
+                        push_clips_to_staging(base_url, ep_id, ai_clips, secret)
+                    except Exception as e:
+                        print(f"  WARNING: Could not push AI clips: {e}")
+
+                print(f"\n✓ Episode ready for editing:")
+                print(f"  {base_url}/admin/staging/{ep_id}")
         elif not quotes_path.exists():
             print(f"\nQuotes JSON missing — run import-episode.py manually, then create staging episode at /admin/staging/new")
 

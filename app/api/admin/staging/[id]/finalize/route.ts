@@ -28,6 +28,85 @@ function findFfmpeg(): string {
   throw new Error('ffmpeg not found')
 }
 
+type ImportPayload = {
+  showName: string
+  season: number
+  episodeNumber: number
+  title: string
+  airDate: string | null
+  productionCode: string | null
+  clips: Array<{
+    filePath: string; startTime: string; stopTime: string; duration: number
+    quotes: Array<{ speaker: string; text: string; sequence: number }>
+  }>
+}
+
+async function importEpisodeToDB(payload: ImportPayload) {
+  const show = await prisma.show.findFirst({ where: { name: payload.showName } })
+  if (!show) throw new Error(`Show not found: ${payload.showName}`)
+
+  let episode = await prisma.episode.findFirst({
+    where: { showId: show.id, season: payload.season, episodeNumber: payload.episodeNumber },
+  })
+  if (!episode) {
+    episode = await prisma.episode.create({
+      data: {
+        showId: show.id,
+        season: payload.season,
+        episodeNumber: payload.episodeNumber,
+        title: payload.title,
+        airDate: payload.airDate ? new Date(payload.airDate) : null,
+        productionCode: payload.productionCode ?? `S${payload.season}E${payload.episodeNumber}`,
+      },
+    })
+  }
+
+  const speakerCache = new Map<string, number>()
+
+  for (const clipData of payload.clips) {
+    const clip = await prisma.clip.create({
+      data: {
+        episodeId: episode.id,
+        filePath: clipData.filePath,
+        startTime: clipData.startTime,
+        stopTime: clipData.stopTime,
+        duration: clipData.duration,
+      },
+    })
+
+    const clipSpeakerCounts = new Map<number, number>()
+
+    for (const q of clipData.quotes) {
+      let speakerId: number | null = null
+      if (q.speaker) {
+        if (speakerCache.has(q.speaker)) {
+          speakerId = speakerCache.get(q.speaker)!
+        } else {
+          let speaker = await prisma.speaker.findFirst({ where: { showId: show.id, name: q.speaker } })
+          if (!speaker) {
+            speaker = await prisma.speaker.create({ data: { showId: show.id, name: q.speaker, type: 'ONE_TIME' } })
+          }
+          speakerCache.set(q.speaker, speaker.id)
+          speakerId = speaker.id
+        }
+        clipSpeakerCounts.set(speakerId, (clipSpeakerCounts.get(speakerId) ?? 0) + 1)
+      }
+
+      await prisma.quote.create({
+        data: { episodeId: episode.id, clipId: clip.id, speakerId, text: q.text, sequence: q.sequence },
+      })
+    }
+
+    for (const [sid, count] of clipSpeakerCounts) {
+      await prisma.clipSpeaker.upsert({
+        where: { clipId_speakerId: { clipId: clip.id, speakerId: sid } },
+        create: { clipId: clip.id, speakerId: sid, lineCount: count },
+        update: { lineCount: count },
+      })
+    }
+  }
+}
+
 // POST /api/admin/staging/[id]/finalize — streams SSE progress events
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -86,28 +165,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
     await prisma.stagingEpisode.update({ where: { id: epId }, data: { status: 'FINALIZING' } })
 
-    // Ensure Episode exists
-    let episode = await prisma.episode.findFirst({
-      where: { showId: staging.showId, season: staging.season, episodeNumber: staging.episodeNumber },
-    })
-    if (!episode) {
-      episode = await prisma.episode.create({
-        data: {
-          showId: staging.showId,
-          season: staging.season,
-          episodeNumber: staging.episodeNumber,
-          title: staging.title.toUpperCase(),
-          airDate: staging.airDate,
-          productionCode: staging.productionCode ?? staging.basename.toUpperCase(),
-        },
-      })
-      send(`Created episode: ${episode.title}`)
-    } else {
-      send(`Using existing episode: ${episode.title}`)
-    }
-
     const total = staging.clips.length
-    let sequence = 0
+    let globalSequence = 0
+
+    // Build import payload while cutting + uploading
+    const importClips: Array<{
+      filePath: string; startTime: string; stopTime: string; duration: number
+      quotes: Array<{ speaker: string; text: string; sequence: number }>
+    }> = []
 
     for (const stagingClip of staging.clips) {
       const filename = `${staging.season}-${staging.episodeNumber}_${stagingClip.index}.mp4`
@@ -146,57 +211,48 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         send(`[${stagingClip.index}/${total}] Uploaded ✓`)
       }
 
-      send(`[${stagingClip.index}/${total}] Importing to database…`)
-
-      const filePath = r2Key
-      const clip = await prisma.clip.create({
-        data: {
-          episodeId: episode.id,
-          filePath,
-          startTime: String(stagingClip.startTime),
-          stopTime: String(stagingClip.endTime),
-          duration: Math.round(duration),
-        },
+      importClips.push({
+        filePath: r2Key,
+        startTime: String(stagingClip.startTime),
+        stopTime: String(stagingClip.endTime),
+        duration: Math.round(duration),
+        quotes: clipQuotes.map(sq => ({
+          speaker: sq.speaker.trim().toUpperCase(),
+          text: sq.text.toUpperCase(),
+          sequence: globalSequence++,
+        })),
       })
+    }
 
-      const speakerCache = new Map<string, number>()
+    const importPayload = {
+      showName: staging.show.name,
+      season: staging.season,
+      episodeNumber: staging.episodeNumber,
+      title: staging.title.toUpperCase(),
+      airDate: staging.airDate ? staging.airDate.toISOString() : null,
+      productionCode: staging.productionCode ?? staging.basename.toUpperCase(),
+      clips: importClips,
+    }
 
-      for (const sq of clipQuotes) {
-        let speakerId: number | null = null
-        const speakerName = sq.speaker.trim().toUpperCase()
-        if (speakerName) {
-          if (speakerCache.has(speakerName)) {
-            speakerId = speakerCache.get(speakerName)!
-          } else {
-            let speaker = await prisma.speaker.findFirst({
-              where: { showId: staging.showId, name: speakerName },
-            })
-            if (!speaker) {
-              speaker = await prisma.speaker.create({
-                data: { showId: staging.showId, name: speakerName, type: 'ONE_TIME' },
-              })
-              send(`  Created new speaker: ${speakerName}`)
-            }
-            speakerCache.set(speakerName, speaker.id)
-            speakerId = speaker.id
-          }
-        }
+    // Import to local DB
+    send('Importing to local database…')
+    await importEpisodeToDB(importPayload)
+    send('Local database updated ✓')
 
-        await prisma.quote.create({
-          data: { episodeId: episode.id, clipId: clip.id, speakerId, text: sq.text.toUpperCase(), sequence: sequence++ },
-        })
+    // Push to prod if configured
+    const prodUrl = process.env.PROD_API_URL
+    if (prodUrl) {
+      send(`Pushing to production (${prodUrl})…`)
+      const res = await fetch(`${prodUrl}/api/admin/import-episode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET! },
+        body: JSON.stringify(importPayload),
+      })
+      if (!res.ok) {
+        const msg = await res.text()
+        throw new Error(`Prod import failed: ${msg}`)
       }
-
-      for (const [name, sid] of speakerCache) {
-        const count = clipQuotes.filter(q => q.speaker.trim() === name).length
-        await prisma.clipSpeaker.upsert({
-          where: { clipId_speakerId: { clipId: clip.id, speakerId: sid } },
-          create: { clipId: clip.id, speakerId: sid, lineCount: count },
-          update: { lineCount: count },
-        })
-      }
-
-      send(`[${stagingClip.index}/${total}] Done ✓`)
+      send('Production database updated ✓')
     }
 
     await prisma.stagingEpisode.update({ where: { id: epId }, data: { status: 'COMPLETE' } })

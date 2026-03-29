@@ -94,6 +94,8 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
   const [activeQuoteId, setActiveQuoteId] = useState<number | null>(null)
   const [insertingAt, setInsertingAt] = useState<number | null>(null)
   const [newQuote, setNewQuote] = useState({ speaker: '', text: '' })
+  const [dragQuoteId, setDragQuoteId] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [episodeEndTime, setEpisodeEndTime] = useState<number | null>(() => {
     const last = [...episode.clips].sort((a, b) => b.index - a.index)[0]
     return last ? last.endTime : null
@@ -197,6 +199,21 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
       setQuotes(prev => { const u = [...prev]; u.splice(afterIndex + 1 < 0 ? 0 : afterIndex + 1, 0, q); return u })
       setNewQuote({ speaker: '', text: '' }); setInsertingAt(null)
     } catch (e) { setError(String(e)) }
+  }
+
+  async function reorderQuotes(fromId: number, toIndex: number) {
+    const fromIndex = quotes.findIndex(q => q.id === fromId)
+    if (fromIndex === -1 || fromIndex === toIndex) return
+    const reordered = [...quotes]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+    const withSequences = reordered.map((q, i) => ({ ...q, sequence: i }))
+    setQuotes(withSequences)
+    const order = withSequences.map(q => ({ id: q.id, sequence: q.sequence }))
+    await fetch(`/api/admin/staging/${episode.id}/quotes`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
+    })
   }
 
   async function deleteQuote(id: number) {
@@ -407,6 +424,14 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                   currentTime={currentTime}
                   editingQuote={editingQuote}
                   speakers={speakers}
+                  isDragging={dragQuoteId === q.id}
+                  isDragOver={dragOverIndex === i}
+                  onDragStart={() => setDragQuoteId(q.id)}
+                  onDragOver={() => setDragOverIndex(i)}
+                  onDragEnd={() => {
+                    if (dragQuoteId !== null && dragOverIndex !== null) reorderQuotes(dragQuoteId, dragOverIndex)
+                    setDragQuoteId(null); setDragOverIndex(null)
+                  }}
                   onSeek={seekTo}
                   onEdit={setEditingQuote}
                   onSaveEdit={saveQuote}
@@ -587,15 +612,19 @@ function InlineDivider({
 }
 
 function QuoteRow({
-  quote, active, currentTime, editingQuote, speakers, onSeek, onEdit, onSaveEdit, onCancelEdit, onDelete, onSplit, onStampTime,
+  quote, active, currentTime, editingQuote, speakers, isDragging, isDragOver,
+  onSeek, onEdit, onSaveEdit, onCancelEdit, onDelete, onSplit, onStampTime,
+  onDragStart, onDragOver, onDragEnd,
 }: {
   quote: Quote; active: boolean; currentTime: number
   editingQuote: { id: number; speaker: string; text: string } | null
   speakers: { id: number; name: string }[]
+  isDragging: boolean; isDragOver: boolean
   onSeek: (t: number) => void
   onEdit: (q: { id: number; speaker: string; text: string }) => void
   onSaveEdit: () => void; onCancelEdit: () => void
   onDelete: (id: number) => void; onSplit: () => void; onStampTime: (id: number, t: number) => void
+  onDragStart: () => void; onDragOver: () => void; onDragEnd: () => void
 }) {
   const isEditing = editingQuote?.id === quote.id
 
@@ -627,7 +656,18 @@ function QuoteRow({
   }
 
   return (
-    <div className={`flex items-start gap-2 px-2 py-1.5 rounded text-sm group transition-colors ${active ? 'bg-yellow-950 border-l-2 border-yellow-500' : 'hover:bg-gray-900'}`}>
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={e => { e.preventDefault(); onDragOver() }}
+      onDragEnd={onDragEnd}
+      className={`flex items-start gap-2 px-2 py-1.5 rounded text-sm group transition-colors cursor-default
+        ${isDragging ? 'opacity-40' : ''}
+        ${isDragOver ? 'border-t-2 border-blue-400' : 'border-t-2 border-transparent'}
+        ${active ? 'bg-yellow-950 border-l-2 border-yellow-500' : 'hover:bg-gray-900'}`}
+    >
+      {/* Drag handle */}
+      <div className="text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity select-none" title="Drag to reorder">⠿</div>
       {/* Timestamp + stamp button */}
       <div className="flex items-center gap-0.5 mt-0.5 shrink-0">
         {quote.startTime != null ? (

@@ -47,8 +47,9 @@ prisma/*.db
 prisma/*.db-shm
 prisma/*.db-wal
 
-# Video clips (copyrighted, large binaries — stored locally only)
+# Video clips and speaker images — stored in Cloudflare R2
 /public/clips/
+/public/pictures/
 
 # Episode processing working directory (large video files)
 /clips/

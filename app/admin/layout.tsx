@@ -34,6 +34,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <p className="px-3 mb-1 text-xs font-semibold uppercase tracking-wider text-gray-600">People</p>
             {navItem('/admin/speakers', 'Speakers')}
           </div>
+          <div>
+            <p className="px-3 mb-1 text-xs font-semibold uppercase tracking-wider text-gray-600">Settings</p>
+            {navItem('/admin/users', 'Users')}
+          </div>
         </nav>
         <div className="px-2 py-4 border-t border-gray-800">
           <Link href="/" className="block px-3 py-1.5 rounded text-sm text-gray-500 hover:text-white hover:bg-gray-800 transition-colors">

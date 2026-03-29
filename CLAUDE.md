@@ -181,13 +181,9 @@ All episode files stored under `clip_prep/{basename}/`.
 
 1. **Import** — `uv run scripts/process-episode.py <season> <episode>` (downloads MKV, transcript, stages quotes)
 2. **Split clips** — Open `/admin/staging/[id]`, review quotes, add clip boundaries with the video player
-3. **Finalize** — Click Finalize; ffmpeg cuts clips, uploads to R2, imports clips/quotes/speakers to DB
-4. **Review speakers** — Go to `/admin/speakers`, fix any auto-created duplicates or misspellings, set speaker types, add photos
+3. **Finalize** — Click Finalize; ffmpeg cuts clips, uploads to R2, imports clips/quotes/speakers to local DB, then automatically pushes to prod DB (requires `PROD_API_URL` in `.env.local`)
+4. **Review speakers** — Go to `/admin/speakers` on prod, fix any auto-created duplicates or misspellings, set speaker types, add photos
 5. **Spot-check** — Search a quote from the episode on the main site; confirm video plays and clips look right
-6. **Sync to Fly.io** — Run from PowerShell in the project root:
-   ```
-   .\scripts\sync-db-to-fly.bat
-   ```
 
 ---
 
@@ -258,6 +254,7 @@ AUTH_SECRET, AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, AUTH_URL
 INTERNAL_API_SECRET
 NEXT_PUBLIC_CLIPS_BASE_URL   # Cloudflare R2 public URL
 R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID, R2_BUCKET_NAME
+PROD_API_URL                 # e.g. https://saywhatnow.fly.dev — enables auto-push to prod on finalize
 ```
 
 ---

@@ -52,6 +52,27 @@ export async function PUT(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ok: true, total: quotes.length + 3 })
 }
 
+// PATCH /api/admin/staging/[id]/quotes — bulk update sequences for reordering
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth()
+  if ((session?.user as { role?: string })?.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { id } = await params
+  const episodeId = parseInt(id)
+  const body = await req.json()
+  const { order }: { order: { id: number; sequence: number }[] } = body
+
+  await prisma.$transaction(
+    order.map(({ id: qid, sequence }) =>
+      prisma.stagingQuote.update({ where: { id: qid, stagingEpisodeId: episodeId }, data: { sequence } })
+    )
+  )
+
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if ((session?.user as { role?: string })?.role !== 'ADMIN') {
