@@ -100,3 +100,33 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, episodeId: episode.id, clips: clips.length })
 }
+
+// DELETE /api/admin/import-episode — remove an episode and all its clips/quotes from the DB
+export async function DELETE(req: NextRequest) {
+  const secret = req.headers.get('x-internal-secret')
+  if (!secret || secret !== process.env.INTERNAL_API_SECRET) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { showName, season, episodeNumber } = await req.json()
+
+  const show = await prisma.show.findFirst({ where: { name: showName } })
+  if (!show) return NextResponse.json({ error: `Show not found: ${showName}` }, { status: 404 })
+
+  const episode = await prisma.episode.findFirst({
+    where: { showId: show.id, season, episodeNumber },
+    include: { clips: { select: { id: true } } },
+  })
+  if (!episode) return NextResponse.json({ error: 'Episode not found' }, { status: 404 })
+
+  const clipIds = episode.clips.map(c => c.id)
+
+  await prisma.$transaction([
+    prisma.clipSpeaker.deleteMany({ where: { clipId: { in: clipIds } } }),
+    prisma.quote.deleteMany({ where: { episodeId: episode.id } }),
+    prisma.clip.deleteMany({ where: { episodeId: episode.id } }),
+    prisma.episode.delete({ where: { id: episode.id } }),
+  ])
+
+  return NextResponse.json({ ok: true, deleted: { episodeId: episode.id, clips: clipIds.length } })
+}

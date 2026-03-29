@@ -188,8 +188,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           '-ss', String(stagingClip.startTime),
           '-i', staging.videoPath,
           '-t', String(duration),
-          '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
-          '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
+          '-c:v', 'copy',
+          '-c:a', 'copy',
+          '-avoid_negative_ts', 'make_zero',
           outPath,
         ])
       } catch (err) {
@@ -250,7 +251,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       })
       if (!res.ok) {
         const msg = await res.text()
-        throw new Error(`Prod import failed: ${msg}`)
+        throw new Error(`Prod import failed (HTTP ${res.status}): ${msg}`)
       }
       send('Production database updated ✓')
     }
