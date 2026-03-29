@@ -121,12 +121,16 @@ export async function DELETE(req: NextRequest) {
 
   const clipIds = episode.clips.map(c => c.id)
 
-  await prisma.$transaction([
-    prisma.clipSpeaker.deleteMany({ where: { clipId: { in: clipIds } } }),
-    prisma.quote.deleteMany({ where: { episodeId: episode.id } }),
-    prisma.clip.deleteMany({ where: { episodeId: episode.id } }),
-    prisma.episode.delete({ where: { id: episode.id } }),
-  ])
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.clipSpeaker.deleteMany({ where: { clipId: { in: clipIds } } })
+      await tx.quote.deleteMany({ where: { episodeId: episode.id } })
+      await tx.clip.deleteMany({ where: { episodeId: episode.id } })
+      await tx.episode.delete({ where: { id: episode.id } })
+    })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true, deleted: { episodeId: episode.id, clips: clipIds.length } })
 }
