@@ -17,6 +17,7 @@ Steps (auto-skipped if output files already exist):
   4. Convert MKV to full MP4              → clip_prep/s01e03/s01e03.mp4
   5. Fetch episode metadata from thesimpsonsapi.com
   6. Match transcript to SRT timestamps   → clip_prep/s01e03/s01e03-quotes.json
+     (falls back to nohomers.net script if foreverdreaming has <70% speaker coverage)
   7. AI clip boundary suggestion (Claude) → clip_prep/s01e03/s01e03-ai-clips.json
   8. Create StagingEpisode in DB + push AI clips → /admin/staging/{id}
 
@@ -140,8 +141,32 @@ _UNICODE_MAP = str.maketrans({
     "\u00a0": " ",
 })
 
+_CENSORED_WORDS = {
+    r"w\*r":    "war",
+    r"k\*ll":   "kill",
+    r"k\*lls":  "kills",
+    r"k\*lled": "killed",
+    r"k\*ller": "killer",
+    r"d\*mn":   "damn",
+    r"h\*ll":   "hell",
+    r"cr\*p":   "crap",
+    r"b\*tch":  "bitch",
+    r"a\*\*":   "ass",
+    r"a\*\*\*": "arse",
+}
+_CENSORED_RE = re.compile(
+    r"\b(" + "|".join(_CENSORED_WORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+def _decensor(m: re.Match) -> str:
+    key = next(k for k in _CENSORED_WORDS if re.fullmatch(k, m.group(0), re.IGNORECASE))
+    replacement = _CENSORED_WORDS[key]
+    return replacement.upper() if m.group(0).isupper() else replacement
+
 def clean_text(text: str) -> str:
     text = text.translate(_UNICODE_MAP)
+    text = _CENSORED_RE.sub(_decensor, text)
     text = re.sub(r"\s*\([^)]*\)", "", text)
     text = re.sub(r"\s*\[[^\]]*\]", "", text)
     text = re.sub(r"[♪♫]+", "", text)
@@ -181,7 +206,13 @@ def parse_transcript(path: str) -> list[dict]:
     entries = []
     current_speaker: str | None = None
     SPEAKER_RE = re.compile(r"^((?:[A-Z][A-Za-z'.]+)(?:\s+[A-Za-z'.]+){0,3}):\s*(.*)$")
+    MULTI_SPEAKER_RE = re.compile(r"^((?:[A-Z][A-Za-z'.]+(?:\s+[A-Za-z'.]+){0,3})(?:\s*[,&]\s*(?:and\s+)?[A-Z][A-Za-z'.]+(?:\s+[A-Za-z'.]+){0,3})+):\s*(.*)$")
     INLINE_SPEAKER_RE = re.compile(r"((?:[A-Z][A-Za-z'.]*)(?:\s+[A-Z][A-Za-z'.]*){0,3}):\s*")
+
+    def split_multi_speakers(raw: str) -> list[str]:
+        """Split 'Bart, Lisa, & Marge' into ['Bart', 'Lisa', 'Marge']."""
+        parts = re.split(r"\s*[,&]\s*", raw)
+        return [re.sub(r"^and\s+", "", p, flags=re.IGNORECASE).strip() for p in parts if p.strip()]
 
     def emit_with_inline_splits(text: str, speaker: str | None) -> str | None:
         tokens = INLINE_SPEAKER_RE.split(text)
@@ -207,12 +238,23 @@ def parse_transcript(path: str) -> list[dict]:
         text = clean_text(text.strip())
         if not text:
             continue
-        m = SPEAKER_RE.match(text)
-        if m:
+        mm = MULTI_SPEAKER_RE.match(text)
+        m = SPEAKER_RE.match(text) if not mm else None
+        if mm:
+            speakers = split_multi_speakers(mm.group(1))
+            dialogue = mm.group(2).strip()
+            for spk in speakers:
+                current_speaker = spk
+                if dialogue:
+                    entries.append({"speaker": spk, "text": dialogue})
+        elif m:
             current_speaker = m.group(1).strip()
             dialogue = m.group(2).strip()
             if dialogue:
                 current_speaker = emit_with_inline_splits(dialogue, current_speaker)
+        else:
+            # No speaker label — emit with empty speaker (will be inferred by AI if needed)
+            entries.append({"speaker": "", "text": text})
 
     return entries
 
@@ -295,14 +337,26 @@ def match_transcript_to_srt(transcript: list[dict], srt: list[dict], min_match_c
     return results, n_anchors
 
 
-def generate_quotes(basename: str, srt_path: str, transcript_path: str, output_path: Path) -> bool:
-    """Match transcript to SRT and write quotes JSON. Returns True on success."""
+def generate_quotes(
+    basename: str,
+    srt_path: str,
+    transcript_path: str,
+    output_path: Path,
+    transcript_entries: list[dict] | None = None,
+) -> bool:
+    """Match transcript to SRT and write quotes JSON. Returns True on success.
+
+    Pass transcript_entries to skip parsing transcript_path (e.g. when using nohomers fallback).
+    """
     print(f"\n=== Generating quotes: {basename} ===")
 
     srt = parse_srt(srt_path)
     print(f"  SRT:        {len(srt)} entries")
 
-    transcript = parse_transcript(transcript_path)
+    if transcript_entries is None:
+        transcript = parse_transcript(transcript_path)
+    else:
+        transcript = transcript_entries
     print(f"  Transcript: {len(transcript)} lines")
 
     matched, n_anchors = match_transcript_to_srt(transcript, srt)
@@ -624,6 +678,314 @@ def suggest_clip_boundaries(quotes_path: Path, env: dict, ai_clips_path: Path) -
     print(f"  Got {len(clips)} clips  (avg {sum(c['endTime']-c['startTime'] for c in clips)/len(clips):.0f}s each)")
     print(f"  Saved: {ai_clips_path}")
     return clips
+
+
+# ---------------------------------------------------------------------------
+# nohomers.net script index — fallback when foreverdreaming has no speakers
+# ---------------------------------------------------------------------------
+
+NOHOMERS_THREAD_URL = "https://nohomers.net/forums/index.php?threads/simpsons-script-collection.57493/"
+
+
+def build_nohomers_index(cache_path: Path) -> dict:
+    """Scrape nohomers.net thread to build index of prod_code -> {item_id, draft_type, title}.
+    Cached as JSON at cache_path."""
+    if cache_path.exists():
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+
+    import urllib.request
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        print("beautifulsoup4 not installed — cannot build nohomers index")
+        return {}
+
+    print("\nFetching nohomers.net script index...")
+    req = urllib.request.Request(
+        NOHOMERS_THREAD_URL,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            html = r.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"  ERROR fetching nohomers thread: {e}")
+        return {}
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Entries look like: "9F06: New Kid on the Block (<a href="...archive.org/details/ITEM_ID">Final delivery</a>)"
+    index: dict[str, dict] = {}
+    for a_tag in soup.find_all("a", href=re.compile(r"archive\.org/details/")):
+        href = a_tag.get("href", "")
+        m = re.search(r"archive\.org/details/([^/\"'\s]+)", href)
+        if not m:
+            continue
+        item_id = m.group(1)
+        draft_type = a_tag.get_text(strip=True).lower()
+
+        # Get the text node immediately before this anchor to extract prod code + title
+        prev = a_tag.previous_sibling
+        if not prev:
+            continue
+        prev_text = str(prev).strip().rstrip("(").strip()
+        m2 = re.match(r"([A-Z0-9]{3,6}):\s*(.+)", prev_text)
+        if not m2:
+            continue
+        prod_code = m2.group(1).strip()
+        title = m2.group(2).strip()
+
+        existing = index.get(prod_code)
+        if not existing or "final" in draft_type:
+            index[prod_code] = {"item_id": item_id, "draft_type": draft_type, "title": title}
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"  Indexed {len(index)} scripts → {cache_path}")
+    return index
+
+
+def find_nohomers_item(index: dict, title: str) -> dict | None:
+    """Find the best matching nohomers index entry by episode title."""
+    if not title or not index:
+        return None
+
+    def normalize(s: str) -> str:
+        s = s.lower()
+        s = re.sub(r"[^\w\s]", "", s)
+        return re.sub(r"\s+", " ", s).strip()
+
+    norm_target = normalize(title)
+    best_match, best_score = None, 0.0
+
+    for entry in index.values():
+        score = SequenceMatcher(None, norm_target, normalize(entry["title"])).ratio()
+        if score > best_score:
+            best_score, best_match = score, entry
+
+    if best_score >= 0.7:
+        return best_match
+    return None
+
+
+def download_djvu_text(item_id: str, cache_path: Path) -> str | None:
+    """Download the _djvu.txt OCR file for an archive.org item. Returns text or None."""
+    if cache_path.exists():
+        return cache_path.read_text(encoding="utf-8", errors="replace")
+
+    import urllib.request
+    meta_url = f"https://archive.org/metadata/{item_id}"
+    try:
+        with urllib.request.urlopen(meta_url, timeout=30) as r:
+            meta = json.loads(r.read())
+    except Exception as e:
+        print(f"  ERROR fetching archive.org metadata for {item_id}: {e}")
+        return None
+
+    files = meta.get("files", [])
+    djvu = next((f for f in files if f["name"].endswith("_djvu.txt")), None)
+    if not djvu:
+        print(f"  No _djvu.txt found in archive.org/{item_id}")
+        return None
+
+    from urllib.parse import quote
+    encoded_name = quote(djvu["name"])
+    url = f"https://archive.org/download/{item_id}/{encoded_name}"
+    print(f"  Downloading {djvu['name']}...")
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            text = r.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"  ERROR downloading {url}: {e}")
+        return None
+
+    cache_path.write_text(text, encoding="utf-8")
+    return text
+
+
+def parse_script_text(text: str) -> list[dict]:
+    """Parse OCR screenplay format into [{speaker, text}] entries.
+
+    Screenplay format:
+        CHARACTER NAME
+        Dialogue continues here
+        across multiple lines.
+
+        ANOTHER CHARACTER
+        Their line.
+    """
+    # Speaker name: all uppercase, 1–5 words, starts+ends with a letter
+    SPEAKER_RE = re.compile(r"^[A-Z][A-Z\s\.\'\-\/]{0,38}[A-Z]$")
+    # Scene headings at start of line: INT. or EXT.
+    SCENE_START_RE = re.compile(r"^(INT|EXT)[\.\s]", re.IGNORECASE)
+    # Scene headings embedded mid-line (for splitting)
+    SCENE_EMBED_RE = re.compile(r"\s+(INT|EXT)\.\s", re.IGNORECASE)
+    # Cast/voice credit lines — OCR dot-leader artifacts: 4+ consecutive dots/dashes/pluses
+    CAST_LINE_RE = re.compile(r"[.\-+]{4,}")
+    # Stage direction lines — ALL CAPS context label + colon + description
+    # e.g. "ON TV: We see a..." — never appears as dialogue in screenplay format
+    DIRECTION_RE = re.compile(r"^[A-Z][A-Z\s]{2,}:\s+[A-Za-z]")
+
+    lines = text.splitlines()
+    entries: list[dict] = []
+    current_speaker = ""
+    dialogue_lines: list[str] = []
+
+    def flush() -> None:
+        if dialogue_lines and current_speaker:
+            combined = " ".join(dl.strip() for dl in dialogue_lines if dl.strip())
+            combined = clean_text(combined)
+            if combined:
+                entries.append({"speaker": current_speaker, "text": combined})
+        dialogue_lines.clear()
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            flush()
+            continue
+
+        # Skip bare page numbers
+        if re.match(r"^\d+\.?$", stripped):
+            continue
+
+        # Skip parenthetical stage directions
+        if stripped.startswith("(") and stripped.endswith(")"):
+            continue
+
+        # Skip cast/voice credit lines (dot-leader OCR artifacts)
+        if CAST_LINE_RE.search(stripped):
+            continue
+
+        # Skip scene headings at start of line
+        if SCENE_START_RE.match(stripped):
+            continue
+
+        # Skip stage direction lines (e.g. "ON TV: We see a...")
+        if DIRECTION_RE.match(stripped):
+            continue
+
+        # If a scene heading is embedded mid-line, keep only the pre-heading text.
+        # Then take just the first sentence from that, since action prose often
+        # precedes the heading (e.g. "Goodbye. The couple runs away. EXT. HOUSE...")
+        m_scene = SCENE_EMBED_RE.search(stripped)
+        if m_scene:
+            stripped = stripped[:m_scene.start()].strip()
+            # Keep only the first sentence to drop trailing stage direction prose
+            parts = re.split(r"\.\s+(?=[A-Z])", stripped, maxsplit=1)
+            if len(parts) > 1:
+                stripped = parts[0].rstrip(".") + "."
+            if not stripped:
+                continue
+
+        # Identify speaker name: all caps, 1–5 words, not a single word ending in "."
+        words = stripped.split()
+        if (SPEAKER_RE.match(stripped)
+                and 1 <= len(words) <= 5
+                and not (len(words) == 1 and stripped.endswith("."))):
+            flush()
+            current_speaker = stripped
+        else:
+            dialogue_lines.append(stripped)
+
+    flush()
+    return entries
+
+
+_SCRIPT_PARSE_SYSTEM = """\
+You are a dialogue extractor for Simpsons screenplay OCR text.
+Extract only spoken dialogue and return it as a JSON array.
+Each element must be an object with exactly two string keys: "speaker" and "text".
+Output raw JSON only — no markdown fences, no explanation, no preamble."""
+
+_SCRIPT_PARSE_RULES = """\
+RULES:
+- Speaker names appear in ALL CAPS on their own line above their dialogue (HOMER, MARGE, MRS. WINFIELD, etc.)
+- Include ONLY spoken dialogue words
+- SKIP everything else:
+  * Scene headings: any line starting with INT. or EXT.
+  * Stage directions / action prose (e.g. "The couple runs away.")
+  * Cast/voice credit lines with dot leaders (e.g. "HOMER......DAN CASTELLANETA")
+  * Parenthetical directions: (chuckling), (cont'd), etc.
+  * Context labels: "ON TV: ...", "CONTINUED:", "OVER:", etc.
+- If a line mixes dialogue + stage direction + scene heading, extract ONLY the spoken words
+  Example: "Goodbye. The couple runs away. EXT. HOUSE" → only "Goodbye."
+- Preserve speaker names exactly as ALL CAPS
+- Preserve original spelling and punctuation in dialogue text"""
+
+
+def _call_claude_for_dialogue(chunk: str, client, title: str = "") -> list[dict]:
+    """Send one chunk of script text to Claude; return list of {speaker, text}."""
+    title_line = f'Episode: "{title}"\n\n' if title else ""
+    prompt = f"{title_line}{_SCRIPT_PARSE_RULES}\n\nSCRIPT CHUNK:\n{chunk}"
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8192,
+        system=_SCRIPT_PARSE_SYSTEM,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = message.content[0].text.strip()
+    start_idx = raw.find("[")
+    end_idx = raw.rfind("]") + 1
+    if start_idx == -1 or end_idx == 0:
+        print(f"  WARNING: No JSON array in response (stop_reason={message.stop_reason})")
+        print(f"  Response preview: {raw[:200]!r}")
+        return []
+    try:
+        entries = json.loads(raw[start_idx:end_idx])
+    except json.JSONDecodeError as e:
+        print(f"  WARNING: JSON parse error ({e}); response preview: {raw[:200]!r}")
+        return []
+    return [
+        {"speaker": str(e.get("speaker", "")).strip(), "text": str(e.get("text", "")).strip()}
+        for e in entries if str(e.get("text", "")).strip()
+    ]
+
+
+def _chunk_script(text: str, max_chars: int = 15000) -> list[str]:
+    """Split script text into chunks at blank-line boundaries, each ≤ max_chars."""
+    paragraphs = re.split(r"\n\s*\n", text)
+    chunks, current = [], []
+    current_len = 0
+    for para in paragraphs:
+        para_len = len(para) + 2
+        if current and current_len + para_len > max_chars:
+            chunks.append("\n\n".join(current))
+            current, current_len = [], 0
+        current.append(para)
+        current_len += para_len
+    if current:
+        chunks.append("\n\n".join(current))
+    return chunks
+
+
+def parse_script_text_ai(text: str, env: dict, title: str = "") -> list[dict]:
+    """Use Claude to extract speaker/dialogue pairs from noisy OCR screenplay text.
+    Chunks long scripts to stay within output token limits.
+    Falls back to regex parser if ANTHROPIC_API_KEY is not set."""
+    api_key = env.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("  No ANTHROPIC_API_KEY — falling back to regex script parser")
+        return parse_script_text(text)
+
+    try:
+        import anthropic as _anthropic
+    except ImportError:
+        print("  anthropic not installed — falling back to regex script parser")
+        return parse_script_text(text)
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    chunks = _chunk_script(text, max_chars=15000)
+    print(f"  Sending {len(text):,} chars to Claude in {len(chunks)} chunk(s)...")
+
+    result: list[dict] = []
+    for i, chunk in enumerate(chunks, 1):
+        if len(chunks) > 1:
+            print(f"  Chunk {i}/{len(chunks)} ({len(chunk):,} chars)...")
+        result.extend(_call_claude_for_dialogue(chunk, client, title if i == 1 else ""))
+
+    print(f"  Got {len(result)} dialogue entries from Claude")
+    return result
 
 
 def push_clips_to_staging(base_url: str, ep_id: int, clips: list[dict], secret: str) -> None:
@@ -1071,12 +1433,37 @@ def main():
         if quotes_path.exists():
             print(f"\nQuotes JSON already exists: {quotes_path}")
         elif srt_path and transcript_path.exists():
-            generate_quotes(basename, srt_path, str(transcript_path), quotes_path)
+            # Check foreverdreaming speaker coverage; fall back to nohomers.net if < 70%
+            fd_entries = parse_transcript(str(transcript_path))
+            n_with_speaker = sum(1 for e in fd_entries if e.get("speaker"))
+            coverage = n_with_speaker / len(fd_entries) if fd_entries else 0.0
+            print(f"\n  Foreverdreaming speaker coverage: {coverage:.0%} ({n_with_speaker}/{len(fd_entries)})")
+
+            transcript_entries = fd_entries
+            if coverage < 0.20 and args.season and args.episode:
+                print("  Coverage < 70% — trying nohomers.net script fallback...")
+                nohomers_index_path = Path("clip_prep") / "nohomers-index.json"
+                nh_index = build_nohomers_index(nohomers_index_path)
+                nh_entry = find_nohomers_item(nh_index, ep_meta.get("title", ""))
+                if nh_entry:
+                    print(f"  Matched: {nh_entry['item_id']} ({nh_entry['draft_type']})")
+                    djvu_cache = episode_dir / f"{basename}-script.txt"
+                    script_text = download_djvu_text(nh_entry["item_id"], djvu_cache)
+                    if script_text:
+                        nh_entries = parse_script_text_ai(script_text, env, ep_meta.get("title", ""))
+                        n_nh = sum(1 for e in nh_entries if e.get("speaker"))
+                        print(f"  Nohomers: {len(nh_entries)} lines, {n_nh} with speaker ({n_nh/len(nh_entries):.0%})" if nh_entries else "  Nohomers: 0 lines parsed")
+                        if nh_entries:
+                            transcript_entries = nh_entries
+                else:
+                    print(f"  No nohomers match found for '{ep_meta.get('title', '')}'")
+
+            generate_quotes(basename, srt_path, str(transcript_path), quotes_path,
+                            transcript_entries=transcript_entries)
+        elif srt_path:
+            print(f"WARNING: Transcript not found at {transcript_path}")
         else:
-            if not srt_path:
-                print("\nWARNING: No SRT — cannot generate quotes.")
-            if not transcript_path.exists():
-                print(f"WARNING: Transcript not found at {transcript_path}")
+            print("\nWARNING: No SRT — cannot generate quotes.")
 
         # Step 6: AI clip boundary suggestion
         ai_clips_path = episode_dir / f"{basename}-ai-clips.json"

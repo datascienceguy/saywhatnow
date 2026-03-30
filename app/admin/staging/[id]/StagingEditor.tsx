@@ -82,7 +82,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [editingQuote, setEditingQuote] = useState<{ id: number; speaker: string; text: string } | null>(null)
+  const [editingQuoteId, setEditingQuoteId] = useState<{ id: number; focusField?: 'speaker' | 'text' } | null>(null)
   const [speakers, setSpeakers] = useState<{ id: number; name: string }[]>([])
   const [showSpeakerMap, setShowSpeakerMap] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -168,17 +168,16 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
     finally { setSaving(false) }
   }
 
-  async function saveQuote() {
-    if (!editingQuote) return
+  async function saveQuote(id: number, speaker: string, text: string) {
     setError('')
     try {
-      const res = await fetch(`/api/admin/staging/${episode.id}/quotes/${editingQuote.id}`, {
+      const res = await fetch(`/api/admin/staging/${episode.id}/quotes/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ speaker: editingQuote.speaker, text: editingQuote.text }),
+        body: JSON.stringify({ speaker, text }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      setQuotes(prev => prev.map(q => q.id === editingQuote.id ? { ...q, ...editingQuote } : q))
-      setEditingQuote(null)
+      setQuotes(prev => prev.map(q => q.id === id ? { ...q, speaker, text } : q))
+      setEditingQuoteId(null)
     } catch (e) { setError(String(e)) }
   }
 
@@ -422,7 +421,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                   quote={q}
                   active={activeQuoteId === q.id}
                   currentTime={currentTime}
-                  editingQuote={editingQuote}
+                  editingQuoteId={editingQuoteId}
                   speakers={speakers}
                   isDragging={dragQuoteId === q.id}
                   isDragOver={dragOverIndex === i}
@@ -433,9 +432,9 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                     setDragQuoteId(null); setDragOverIndex(null)
                   }}
                   onSeek={seekTo}
-                  onEdit={setEditingQuote}
+                  onStartEdit={setEditingQuoteId}
                   onSaveEdit={saveQuote}
-                  onCancelEdit={() => setEditingQuote(null)}
+                  onCancelEdit={() => setEditingQuoteId(null)}
                   onDelete={deleteQuote}
                   onSplit={async () => {
                     const next = quotes[i + 1]
@@ -612,43 +611,53 @@ function InlineDivider({
 }
 
 function QuoteRow({
-  quote, active, currentTime, editingQuote, speakers, isDragging, isDragOver,
-  onSeek, onEdit, onSaveEdit, onCancelEdit, onDelete, onSplit, onStampTime,
+  quote, active, currentTime, editingQuoteId, speakers, isDragging, isDragOver,
+  onSeek, onStartEdit, onSaveEdit, onCancelEdit, onDelete, onSplit, onStampTime,
   onDragStart, onDragOver, onDragEnd,
 }: {
   quote: Quote; active: boolean; currentTime: number
-  editingQuote: { id: number; speaker: string; text: string } | null
+  editingQuoteId: { id: number; focusField?: 'speaker' | 'text' } | null
   speakers: { id: number; name: string }[]
   isDragging: boolean; isDragOver: boolean
   onSeek: (t: number) => void
-  onEdit: (q: { id: number; speaker: string; text: string }) => void
-  onSaveEdit: () => void; onCancelEdit: () => void
+  onStartEdit: (q: { id: number; focusField?: 'speaker' | 'text' }) => void
+  onSaveEdit: (id: number, speaker: string, text: string) => void
+  onCancelEdit: () => void
   onDelete: (id: number) => void; onSplit: () => void; onStampTime: (id: number, t: number) => void
   onDragStart: () => void; onDragOver: () => void; onDragEnd: () => void
 }) {
-  const isEditing = editingQuote?.id === quote.id
+  const isEditing = editingQuoteId?.id === quote.id
+  const [localSpeaker, setLocalSpeaker] = useState(quote.speaker)
+  const [localText, setLocalText] = useState(quote.text)
 
-  if (isEditing && editingQuote) {
+  useEffect(() => {
+    if (isEditing) { setLocalSpeaker(quote.speaker); setLocalText(quote.text) }
+  }, [isEditing])
+
+  if (isEditing) {
     return (
       <div className="my-1 border border-yellow-600 rounded-lg p-2.5 space-y-2 bg-gray-900">
         <datalist id={`speakers-${quote.id}`}>
           {speakers.map(s => <option key={s.id} value={s.name} />)}
         </datalist>
         <input
-          autoFocus list={`speakers-${quote.id}`}
+          autoFocus={editingQuoteId?.focusField !== 'text'} list={`speakers-${quote.id}`}
           className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-yellow-400"
-          value={editingQuote.speaker}
-          onChange={e => onEdit({ ...editingQuote, speaker: e.target.value })}
+          value={localSpeaker}
+          onChange={e => setLocalSpeaker(e.target.value)}
           placeholder="Speaker"
+          onKeyDown={e => { if (e.key === 'Enter') onSaveEdit(quote.id, localSpeaker, localText) }}
         />
         <textarea
+          autoFocus={editingQuoteId?.focusField === 'text'}
           className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-yellow-400 resize-none"
           rows={2}
-          value={editingQuote.text}
-          onChange={e => onEdit({ ...editingQuote, text: e.target.value })}
+          value={localText}
+          onChange={e => setLocalText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) onSaveEdit(quote.id, localSpeaker, localText) }}
         />
         <div className="flex gap-2">
-          <button onClick={onSaveEdit} className="px-3 py-1 bg-yellow-400 text-gray-950 rounded text-xs font-semibold">Save</button>
+          <button onClick={() => onSaveEdit(quote.id, localSpeaker, localText)} className="px-3 py-1 bg-yellow-400 text-gray-950 rounded text-xs font-semibold">Save</button>
           <button onClick={onCancelEdit} className="px-3 py-1 bg-gray-700 rounded text-xs text-gray-400 hover:bg-gray-600">Cancel</button>
         </div>
       </div>
@@ -686,13 +695,22 @@ function QuoteRow({
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <span className="font-semibold text-yellow-200">{quote.speaker}: </span>
-        <span className="text-gray-300">{quote.text}</span>
+        <span
+          className="font-semibold text-yellow-200 cursor-pointer hover:text-yellow-100 hover:underline"
+          onClick={() => onStartEdit({ id: quote.id, focusField: 'speaker' })}
+          title="Click to edit speaker"
+        >{quote.speaker}</span>
+        <span className="text-gray-500">: </span>
+        <span
+          className="text-gray-300 cursor-pointer hover:text-white"
+          onClick={() => onStartEdit({ id: quote.id, focusField: 'text' })}
+          title="Click to edit text"
+        >{quote.text}</span>
       </div>
 
       {/* Actions */}
       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
-        <button onClick={() => onEdit({ id: quote.id, speaker: quote.speaker, text: quote.text })} className="text-gray-600 hover:text-yellow-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title="Edit">✎</button>
+        <button onClick={() => onStartEdit({ id: quote.id })} className="text-gray-600 hover:text-yellow-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title="Edit">✎</button>
         <button onClick={onSplit} className="text-gray-600 hover:text-blue-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title={`Split @ ${fmtTime(currentTime)}`}>⧉</button>
         <button onClick={() => onDelete(quote.id)} className="text-gray-600 hover:text-red-400 px-1 py-0.5 rounded hover:bg-gray-800 transition-colors" title="Delete">✕</button>
       </div>
