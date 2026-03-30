@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import GamesMenu from './GamesMenu'
+import ShowsMenu from './ShowsMenu'
 import SignOutButton from './SignOutButton'
 import BackButton from './BackButton'
+import prisma from '@/lib/prisma'
 
 interface Props {
   userName?: string | null
@@ -12,7 +14,9 @@ interface Props {
   subtitle?: React.ReactNode
 }
 
-export default function SiteHeader({ userName, userImage, isAdmin, back, subtitle }: Props) {
+export default async function SiteHeader({ userName, userImage, isAdmin, back, subtitle }: Props) {
+  const shows = await prisma.show.findMany({ orderBy: { name: 'asc' } })
+
   return (
     <header className="site-header">
       {back && <BackButton />}
@@ -26,6 +30,7 @@ export default function SiteHeader({ userName, userImage, isAdmin, back, subtitl
         </div>
       )}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+        <ShowsMenu shows={shows} />
         <GamesMenu />
         {isAdmin && (
           <Link

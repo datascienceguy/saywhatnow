@@ -98,6 +98,33 @@ body {
   .site-header-subtitle span { font-size: 0.775rem !important; }
 }
 
+/* ── Show / Episode stats pages ─────────────────── */
+.stats-table th,
+.stats-table td {
+  padding: 0.5rem 1rem;
+}
+.episode-row-meta,
+.clip-row-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  margin-left: 1rem;
+  font-size: 0.75rem;
+  color: #aaa;
+}
+@media (max-width: 600px) {
+  .stats-table th,
+  .stats-table td {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.8rem;
+  }
+  .episode-row-meta,
+  .clip-row-meta {
+    display: none;
+  }
+}
+
 /* ── Speaker profile card ────────────────────────── */
 @media (max-width: 480px) {
   .speaker-profile-card {

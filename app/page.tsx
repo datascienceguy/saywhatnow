@@ -45,7 +45,24 @@ export default async function HomePage({ searchParams }: PageProps) {
         )}
 
         {!(params.q || params.episodeId || params.speakerName) && (
-          <p className="mt-12 text-center text-sm" style={{ color: '#1B4F72' }}>D&apos;oh! Enter a quote to search.</p>
+          <div style={{ marginTop: '3rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
+            <p style={{ color: '#1B4F72', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Or browse by show:</p>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {shows.map(show => (
+                <a
+                  key={show.id}
+                  href={`/show/${show.id}`}
+                  style={{
+                    display: 'block', padding: '0.75rem 1.5rem', background: 'white',
+                    border: '2px solid #1a1a1a', borderRadius: '8px', boxShadow: '3px 3px 0 #1a1a1a',
+                    fontWeight: 700, fontSize: '1rem', textDecoration: 'none', color: '#1a1a1a',
+                  }}
+                >
+                  {show.name}
+                </a>
+              ))}
+            </div>
+          </div>
         )}
       </main>
     </div>
