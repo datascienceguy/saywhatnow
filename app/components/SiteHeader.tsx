@@ -30,6 +30,9 @@ export default async function SiteHeader({ userName, userImage, isAdmin, back, s
         </div>
       )}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+        <Link href="/random" style={{ fontSize: '0.8rem', fontWeight: 600, color: '#3a2800', textDecoration: 'none', flexShrink: 0 }}>
+          Random
+        </Link>
         <ShowsMenu shows={shows} />
         <GamesMenu />
         {isAdmin && (
