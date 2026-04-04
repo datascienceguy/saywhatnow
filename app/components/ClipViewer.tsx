@@ -49,7 +49,7 @@ export default function ClipViewer({ src, startTime, stopTime, quotes, matchQ }:
   return (
     <div className="clip-viewer">
       <div className="clip-video-wrap">
-        <video ref={videoRef} controls autoPlay>
+        <video ref={videoRef} controls autoPlay playsInline>
           <source src={src} type="video/mp4" />
         </video>
       </div>

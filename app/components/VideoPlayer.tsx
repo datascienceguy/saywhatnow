@@ -12,7 +12,7 @@ export default function VideoPlayer({ src }: { src: string }) {
   }, [])
 
   return (
-    <video ref={ref} controls autoPlay style={{ display: 'block', maxWidth: '100%' }}>
+    <video ref={ref} controls autoPlay playsInline style={{ display: 'block', maxWidth: '100%' }}>
       <source src={src} type="video/mp4" />
     </video>
   )
