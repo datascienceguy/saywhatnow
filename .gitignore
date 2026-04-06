@@ -50,6 +50,7 @@ prisma/*.db-wal
 # Video clips and speaker images — stored in Cloudflare R2
 /public/clips/
 /public/pictures/
+!/public/pictures/saywhatnow.jpg
 
 # Episode processing working directory (large video files)
 /clips/
