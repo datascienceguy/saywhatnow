@@ -20,8 +20,8 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [3/4] Verifying upload...
-flyctl ssh console --command "ls -lh /data/prod.db" --app saywhatnow
+echo [3/4] Fixing permissions and verifying upload...
+flyctl ssh console --command "chown nextjs:nogroup /data/prod.db && ls -lh /data/prod.db" --app saywhatnow
 
 echo [4/4] Restarting app...
 flyctl apps restart saywhatnow

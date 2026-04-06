@@ -70,6 +70,17 @@ export default function SearchForm({ shows, episodes, speakers, lockedShowId, se
     router.push(`${searchPath}?${p.toString()}`)
   }, [q, showId, season, episodeId, speakerName, router])
 
+  const isDirty = q.trim() || (!lockedShowId && showId) || season || episodeId || speakerName.trim()
+
+  function handleClear() {
+    setQ('')
+    if (!lockedShowId) setShowId('')
+    setSeason('')
+    setEpisodeId('')
+    setSpeakerName('')
+    router.push(searchPath)
+  }
+
   const inputStyle = {
     border: '2px solid #1a1a1a',
     borderRadius: '6px',
@@ -108,6 +119,17 @@ export default function SearchForm({ shows, episodes, speakers, lockedShowId, se
         >
           Search
         </button>
+        {isDirty && (
+          <button
+            type="button"
+            onClick={handleClear}
+            style={{ padding: '0.5rem 0.75rem', background: 'white', border: '2px solid #1a1a1a', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', color: '#555', whiteSpace: 'nowrap' }}
+            onMouseOver={e => (e.currentTarget.style.background = '#f0f0f0')}
+            onMouseOut={e => (e.currentTarget.style.background = 'white')}
+          >
+            Clear
+          </button>
+        )}
       </div>
       <div className="search-filters">
         {!lockedShowId && (

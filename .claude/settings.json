@@ -27,11 +27,28 @@
       "Bash(grep -n \"width: ''2.5rem'', height: ''2.5rem'', borderRadius: ''50%'', border: ''2px solid #ccc'', background: ''#eee''\" /c/Users/dxm27/Documents/dev/saywhatnow-next/app/components/SearchResults.tsx /c/Users/dxm27/Documents/dev/saywhatnow-next/app/components/ClipViewer.tsx /c/Users/dxm27/Documents/dev/saywhatnow-next/app/clip/[id]/page.tsx)",
       "Bash(git -C /c/Users/dxm27/Documents/dev/saywhatnow-next ls-files public/clips/)",
       "Bash(grep -n \"← Back\" /c/Users/dxm27/Documents/dev/saywhatnow-next/app/clip/[id]/page.tsx /c/Users/dxm27/Documents/dev/saywhatnow-next/app/speaker/[id]/page.tsx)",
-      "Bash(grep -A 30 \"CREATE TABLE \\\\`quotes\\\\`\" \"c:\\\\Users\\\\dxm27\\\\Documents\\\\dev\\\\saywhatnow\\\\swn_videos_new.sql\")"
+      "Bash(grep -A 30 \"CREATE TABLE \\\\`quotes\\\\`\" \"c:\\\\Users\\\\dxm27\\\\Documents\\\\dev\\\\saywhatnow\\\\swn_videos_new.sql\")",
+      "Bash(npx auth:*)",
+      "Bash(node -e \"console.log\\(require\\(''crypto''\\).randomBytes\\(32\\).toString\\(''base64''\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(ffmpeg -ss 60 -i \"./clip_prep/raw_episodes/The.Simpsons.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-MZABI.mkv\" -t 30 -c:v libx264 -crf 18 -preset fast -c:a aac -b:a 192k -ac 2 test.mp4)",
+      "Bash(where ffmpeg:*)",
+      "Bash(FFMPEG=\"/c/Users/dxm27/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin/ffmpeg.exe\" \"$FFMPEG\" -ss 60 -i \"./clip_prep/raw_episodes/The.Simpsons.S01E01.1080p.DSNP.WEB-DL.DDP5.1.H.264-MZABI.mkv\" -t 30 -c:v libx264 -crf 18 -preset fast -c:a aac -b:a 192k -ac 2 test.mp4)",
+      "WebFetch(domain:transcripts.foreverdreaming.org)",
+      "Bash(npx kill-port:*)",
+      "Bash(ls c:/Users/dxm27/Documents/dev/saywhatnow-next/clips/s01e01/*manifest*)",
+      "Bash(uv run:*)",
+      "Bash(~/.local/bin/uv run:*)",
+      "Bash(/c/Users/dxm27/AppData/Local/Microsoft/WinGet/Packages/astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe/uv.exe run:*)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes, make sure it looks the same as it is now, the data i mean\" npx prisma migrate reset --force)",
+      "Bash(cmd.exe /c \"handle.exe c:\\\\Users\\\\dxm27\\\\Documents\\\\dev\\\\saywhatnow-next\\\\prisma\\\\dev.db 2>&1\")",
+      "Bash(cmd.exe /c \"fuser c:\\\\Users\\\\dxm27\\\\Documents\\\\dev\\\\saywhatnow-next\\\\prisma\\\\dev.db 2>&1\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\dxm27\\Documents\\dev\\saywhatnow-next\\app\\clip",
-      "C:\\Users\\dxm27\\Documents\\dev\\saywhatnow-next\\app\\speaker"
+      "C:\\Users\\dxm27\\Documents\\dev\\saywhatnow-next\\app\\speaker",
+      "C:\\Users\\dxm27\\Documents\\dev\\saywhatnow-next\\app\\api\\auth"
     ]
   }
 }

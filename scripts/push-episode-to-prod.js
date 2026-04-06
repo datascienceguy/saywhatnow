@@ -15,10 +15,12 @@ const args = process.argv.slice(2)
 const getArg = (flag) => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null }
 const season = parseInt(getArg('--season') ?? getArg('-s'))
 const episode = parseInt(getArg('--episode') ?? getArg('-e'))
+const show = getArg('--show') ?? 'Simpsons'
 const force = args.includes('--force')
 
 if (!season || !episode) {
-  console.error('Usage: node scripts/push-episode-to-prod.js --season <n> --episode <n> [--force]')
+  console.error('Usage: node scripts/push-episode-to-prod.js --season <n> --episode <n> [--show <name>] [--force]')
+  console.error('  --show defaults to "Simpsons"')
   process.exit(1)
 }
 
@@ -43,8 +45,8 @@ const ep = db.prepare(`
   SELECT e.*, s.name as showName
   FROM Episode e
   JOIN Show s ON s.id = e.showId
-  WHERE e.season = ? AND e.episodeNumber = ?
-`).get(season, episode)
+  WHERE e.season = ? AND e.episodeNumber = ? AND s.name LIKE ?
+`).get(season, episode, `%${show}%`)
 
 if (!ep) {
   console.error(`Episode S${String(season).padStart(2,'0')}E${String(episode).padStart(2,'0')} not found in local DB`)

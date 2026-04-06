@@ -70,8 +70,8 @@ function highlightText(text: string, terms: string[]): React.ReactNode {
 
 /** Build a safe FTS5 MATCH expression from user input */
 function buildFtsQuery(raw: string): string {
-  // Strip FTS5 special chars, wrap as phrase for exact match
-  const sanitized = raw.replace(/["*^()]/g, ' ').replace(/\s+/g, ' ').trim()
+  // Strip apostrophes (indexed text has them removed too) and FTS5 special chars
+  const sanitized = raw.replace(/'/g, '').replace(/["*^()]/g, ' ').replace(/\s+/g, ' ').trim()
   return `"${sanitized}"`
 }
 

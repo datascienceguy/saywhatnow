@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
 function buildFtsQuery(raw: string): string {
-  const sanitized = raw.replace(/["*^()]/g, ' ').replace(/\s+/g, ' ').trim()
+  const sanitized = raw.replace(/'/g, '').replace(/["*^()]/g, ' ').replace(/\s+/g, ' ').trim()
   return `"${sanitized}"`
 }
 

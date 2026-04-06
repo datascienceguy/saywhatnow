@@ -34,13 +34,10 @@ export default async function HomePage({ searchParams }: PageProps) {
         userName={session?.user?.name}
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
-        subtitle="The Simpsons quote search"
+        subtitle={<span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.4rem', letterSpacing: '0.05em', lineHeight: 1 }}>The Simpsons</span>}
       />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <h1 style={{ fontFamily: 'var(--font-bangers)', fontSize: '2.5rem', letterSpacing: '0.05em', margin: '0 0 1rem 0', color: '#1a1a1a', lineHeight: 1 }}>
-          The Simpsons
-        </h1>
         <Suspense>
           <SearchForm shows={shows} episodes={episodes} speakers={speakers} lockedShowId={simpsons?.id} />
         </Suspense>
