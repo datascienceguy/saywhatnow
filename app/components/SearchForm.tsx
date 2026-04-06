@@ -11,36 +11,41 @@ interface Props {
   shows: Show[]
   episodes: Episode[]
   speakers: Speaker[]
+  lockedShowId?: number   // when set, hides the show dropdown and always filters to this show
+  searchPath?: string     // where the form submits to (default '/')
 }
 
-export default function SearchForm({ shows, episodes, speakers }: Props) {
+export default function SearchForm({ shows, episodes, speakers, lockedShowId, searchPath = '/' }: Props) {
   const router = useRouter()
   const params = useSearchParams()
 
   const [q, setQ] = useState(params.get('q') ?? '')
-  const [showId, setShowId] = useState(params.get('showId') ?? '')
+  const [showId, setShowId] = useState(lockedShowId ? String(lockedShowId) : (params.get('showId') ?? ''))
   const [season, setSeason] = useState(params.get('season') ?? '')
   const [episodeId, setEpisodeId] = useState(params.get('episodeId') ?? '')
   const [speakerName, setSpeakerName] = useState(params.get('speakerName') ?? '')
 
   const seasons = useMemo(() => {
-    if (!showId) return []
+    if (!lockedShowId && !showId) return []
     return [...new Set(
-      episodes.filter(e => e.showId === Number(showId)).map(e => e.season)
+      episodes
+        .filter(e => lockedShowId ? true : e.showId === Number(showId))
+        .map(e => e.season)
     )].sort((a, b) => a - b)
-  }, [showId, episodes])
+  }, [showId, lockedShowId, episodes])
 
   const filteredEpisodes = useMemo(() => {
-    if (!showId) return []
+    if (!lockedShowId && !showId) return []
     return episodes.filter(e =>
-      e.showId === Number(showId) && (!season || e.season === Number(season))
+      (lockedShowId ? true : e.showId === Number(showId)) &&
+      (!season || e.season === Number(season))
     )
-  }, [showId, season, episodes])
+  }, [showId, lockedShowId, season, episodes])
 
   const filteredSpeakers = useMemo(() => {
-    if (!showId) return speakers
-    return speakers.filter(s => s.showId === Number(showId))
-  }, [showId, speakers])
+    if (!lockedShowId && !showId) return speakers
+    return lockedShowId ? speakers : speakers.filter(s => s.showId === Number(showId))
+  }, [showId, lockedShowId, speakers])
 
   function handleShowChange(val: string) {
     setShowId(val)
@@ -62,7 +67,7 @@ export default function SearchForm({ shows, episodes, speakers }: Props) {
     if (season) p.set('season', season)
     if (episodeId) p.set('episodeId', episodeId)
     if (speakerName.trim()) p.set('speakerName', speakerName.trim())
-    router.push(`/?${p.toString()}`)
+    router.push(`${searchPath}?${p.toString()}`)
   }, [q, showId, season, episodeId, speakerName, router])
 
   const inputStyle = {
@@ -105,16 +110,19 @@ export default function SearchForm({ shows, episodes, speakers }: Props) {
         </button>
       </div>
       <div className="search-filters">
-        <select value={showId} onChange={e => handleShowChange(e.target.value)} style={filterStyle}>
-          <option value="">All Shows</option>
-          {shows.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select value={season} onChange={e => handleSeasonChange(e.target.value)} style={filterStyle} disabled={!showId}>
-          {!showId ? <option value="">Select a show first</option> : <option value="">All Seasons</option>}
+        {!lockedShowId && (
+          <select value={showId} onChange={e => handleShowChange(e.target.value)} style={filterStyle}>
+            <option value="">All Shows</option>
+            {shows.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+        <select value={season} onChange={e => handleSeasonChange(e.target.value)} style={filterStyle} disabled={!lockedShowId && !showId}>
+          {(!lockedShowId && !showId) ? <option value="">Select a show first</option> : <option value="">All Seasons</option>}
           {seasons.map(n => <option key={n} value={n}>Season {n}</option>)}
         </select>
-        <select value={episodeId} onChange={e => setEpisodeId(e.target.value)} style={{ ...filterStyle, flex: 1, minWidth: '10rem' }} disabled={!showId}>
-          {!showId ? <option value="">Select a show first</option> : <option value="">All Episodes</option>}
+        <select value={episodeId} onChange={e => setEpisodeId(e.target.value)} style={{ ...filterStyle, flex: 1, minWidth: '10rem' }} disabled={!lockedShowId && !showId}>
+          {(!lockedShowId && !showId) ? <option value="">Select a show first</option> : <option value="">All Episodes</option>}
+
           {filteredEpisodes.map(ep => (
             <option key={ep.id} value={ep.id}>S{ep.season}E{ep.episodeNumber} — {ep.title}</option>
           ))}

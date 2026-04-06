@@ -78,13 +78,18 @@ function highlightText(text: string, terms: string[]): React.ReactNode {
 function quoteMatchesToken(text: string, token: { value: string; exact: boolean }): boolean {
   const upper = text.toUpperCase()
   const val = token.value
-  const idx = upper.indexOf(val)
-  if (idx === -1) return false
-  if (token.exact) return true
-  // Word boundary: char before and after must be non-alpha (or start/end)
-  const before = idx === 0 ? ' ' : upper[idx - 1]
-  const after = idx + val.length >= upper.length ? ' ' : upper[idx + val.length]
-  return !/[A-Z0-9']/.test(before) && !/[A-Z0-9']/.test(after)
+  if (token.exact) return upper.includes(val)
+  // Word boundary: scan all occurrences, return true if any passes
+  let i = 0
+  while (i < upper.length) {
+    const idx = upper.indexOf(val, i)
+    if (idx === -1) return false
+    const before = idx === 0 ? ' ' : upper[idx - 1]
+    const after = idx + val.length >= upper.length ? ' ' : upper[idx + val.length]
+    if (!/[A-Z0-9']/.test(before) && !/[A-Z0-9']/.test(after)) return true
+    i = idx + 1
+  }
+  return false
 }
 
 export default async function SearchResults({ q, showId, season, episodeId, speakerName, page: pageStr, limit: limitStr }: Props) {
