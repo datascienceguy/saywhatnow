@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { parseSearchQuery, getHighlightTerms } from '@/lib/search'
 
-function quoteMatchesToken(text: string, token: { value: string; exact: boolean }): boolean {
-  const upper = text.toUpperCase()
-  const val = token.value
-  const idx = upper.indexOf(val)
-  if (idx === -1) return false
-  if (token.exact) return true
-  const before = idx === 0 ? ' ' : upper[idx - 1]
-  const after = idx + val.length >= upper.length ? ' ' : upper[idx + val.length]
-  return !/[A-Z0-9']/.test(before) && !/[A-Z0-9']/.test(after)
+function buildFtsQuery(raw: string): string {
+  const sanitized = raw.replace(/["*^()]/g, ' ').replace(/\s+/g, ' ').trim()
+  return `"${sanitized}"`
 }
 
 export async function GET(req: NextRequest) {
@@ -19,11 +12,7 @@ export async function GET(req: NextRequest) {
   const speakerId = req.nextUrl.searchParams.get('speakerId')
   const season = req.nextUrl.searchParams.get('season')
 
-  const tokens = q.length >= 2 ? parseSearchQuery(q) : []
-  const includeTokens = tokens.filter(t => t.type === 'include')
-  const excludeTokens = tokens.filter(t => t.type === 'exclude')
-
-  if (includeTokens.length === 0) return NextResponse.json([])
+  if (q.length < 2) return NextResponse.json([])
 
   const baseFilter = {
     ...(speakerId ? { speakerId: Number(speakerId) } : {}),
@@ -35,32 +24,24 @@ export async function GET(req: NextRequest) {
     } : {}),
   }
 
-  let clipIdSet: Set<number> | null = null
-  for (const token of includeTokens) {
-    const rows = await prisma.quote.findMany({
-      where: { ...baseFilter, text: { contains: token.value } },
-      select: { clipId: true, text: true },
-      distinct: ['clipId'],
-    })
-    const ids = new Set(rows.filter(r => quoteMatchesToken(r.text, token)).map(r => r.clipId))
-    if (clipIdSet === null) { clipIdSet = ids } else { const prev: Set<number> = clipIdSet; clipIdSet = new Set([...prev].filter(id => ids.has(id))) }
-    if (clipIdSet.size === 0) break
-  }
+  const ftsResults = await prisma.$queryRaw<{ rowid: bigint }[]>`
+    SELECT rowid FROM quotes_fts WHERE quotes_fts MATCH ${buildFtsQuery(q)}
+  `
+  if (ftsResults.length === 0) return NextResponse.json([])
 
-  for (const token of excludeTokens) {
-    if (!clipIdSet || clipIdSet.size === 0) break
-    const rows = await prisma.quote.findMany({
-      where: { text: { contains: token.value } },
-      select: { clipId: true, text: true },
-    })
-    const excludedIds = new Set(rows.filter(r => quoteMatchesToken(r.text, token)).map(r => r.clipId))
-    clipIdSet = new Set([...clipIdSet].filter(id => !excludedIds.has(id)))
-  }
+  const quoteIds = ftsResults.map(r => Number(r.rowid))
+  const rows = await prisma.quote.findMany({
+    where: { id: { in: quoteIds }, ...baseFilter },
+    select: { clipId: true },
+    distinct: ['clipId'],
+  })
+  const clipIds = rows.map(r => r.clipId)
+  if (clipIds.length === 0) return NextResponse.json([])
 
-  if (!clipIdSet || clipIdSet.size === 0) return NextResponse.json([])
+  const highlightTerms = q.toUpperCase().replace(/["*^()]/g, ' ').split(/\s+/).filter(t => t.length > 0)
 
   const clips = await prisma.clip.findMany({
-    where: { id: { in: [...clipIdSet] } },
+    where: { id: { in: clipIds } },
     include: {
       episode: { include: { show: true } },
       quotes: { include: { speaker: true }, orderBy: { sequence: 'asc' } },
@@ -73,12 +54,11 @@ export async function GET(req: NextRequest) {
     take: 30,
   })
 
-  const highlightTerms = getHighlightTerms(tokens)
   const results = clips.map(clip => ({
     ...clip,
     quotes: clip.quotes.map(quote => ({
       ...quote,
-      isMatch: includeTokens.some(t => quoteMatchesToken(quote.text, t)),
+      isMatch: highlightTerms.some(t => quote.text.toUpperCase().includes(t)),
     })),
     highlightTerms,
   }))

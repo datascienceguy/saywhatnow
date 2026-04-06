@@ -5,7 +5,6 @@ import PageSizeSelector from './PageSizeSelector'
 import SpeakerLink from './SpeakerLink'
 import ClickableCard from './ClickableCard'
 import { toTitleCase } from '@/lib/display'
-import { parseSearchQuery, getHighlightTerms } from '@/lib/search'
 
 interface Props {
   q: string
@@ -37,10 +36,6 @@ function buildPageUrl(q: string, page: number, limit: number, showId?: string, s
   return `/?${params.toString()}`
 }
 
-/**
- * Highlight all search terms in the display text.
- * Finds all occurrences, merges overlapping ranges, wraps in <mark>.
- */
 function highlightText(text: string, terms: string[]): React.ReactNode {
   if (terms.length === 0) return text
   const upper = text.toUpperCase()
@@ -56,7 +51,6 @@ function highlightText(text: string, terms: string[]): React.ReactNode {
   }
   if (ranges.length === 0) return text
   ranges.sort((a, b) => a.s - b.s)
-  // Merge overlapping
   const merged: { s: number; e: number }[] = []
   for (const r of ranges) {
     const last = merged[merged.length - 1]
@@ -74,29 +68,15 @@ function highlightText(text: string, terms: string[]): React.ReactNode {
   return <>{nodes}</>
 }
 
-/** Check if a quote text matches a token (post-DB filter for word boundaries on non-exact tokens) */
-function quoteMatchesToken(text: string, token: { value: string; exact: boolean }): boolean {
-  const upper = text.toUpperCase()
-  const val = token.value
-  if (token.exact) return upper.includes(val)
-  // Word boundary: scan all occurrences, return true if any passes
-  let i = 0
-  while (i < upper.length) {
-    const idx = upper.indexOf(val, i)
-    if (idx === -1) return false
-    const before = idx === 0 ? ' ' : upper[idx - 1]
-    const after = idx + val.length >= upper.length ? ' ' : upper[idx + val.length]
-    if (!/[A-Z0-9']/.test(before) && !/[A-Z0-9']/.test(after)) return true
-    i = idx + 1
-  }
-  return false
+/** Build a safe FTS5 MATCH expression from user input */
+function buildFtsQuery(raw: string): string {
+  // Strip FTS5 special chars, wrap as phrase for exact match
+  const sanitized = raw.replace(/["*^()]/g, ' ').replace(/\s+/g, ' ').trim()
+  return `"${sanitized}"`
 }
 
 export default async function SearchResults({ q, showId, season, episodeId, speakerName, page: pageStr, limit: limitStr }: Props) {
-  const tokens = q.trim().length >= 2 ? parseSearchQuery(q.trim()) : []
-  const includeTokens = tokens.filter(t => t.type === 'include')
-  const excludeTokens = tokens.filter(t => t.type === 'exclude')
-  const hasTextQuery = includeTokens.length > 0
+  const hasTextQuery = q.trim().length >= 2
   const hasFilters = !!(episodeId || speakerName)
 
   if (!hasTextQuery && !hasFilters) {
@@ -106,9 +86,8 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
   const limit = Math.min(Math.max(Number(limitStr) || 10, 1), 100)
   const page = Math.max(Number(pageStr) || 1, 1)
 
-  // Base filter: episode/show/season/speaker — applied to every query
   const baseFilter = {
-    ...(speakerName ? { speaker: { name: { contains: speakerName } } } : {}),
+    ...(speakerName ? { speaker: { name: { contains: speakerName.toUpperCase() } } } : {}),
     ...(showId || season || episodeId ? {
       episode: {
         ...(episodeId ? { id: Number(episodeId) } : {
@@ -119,48 +98,31 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
     } : {}),
   }
 
-  // Build candidate clip ID set
-  let clipIdSet: Set<number> | null = null
+  let clipIdSet: Set<number>
 
   if (hasTextQuery) {
-    // For each include token, find matching clipIds and intersect (AND logic)
-    for (const token of includeTokens) {
+    const ftsQuery = buildFtsQuery(q.trim())
+    const ftsResults = await prisma.$queryRaw<{ rowid: bigint }[]>`
+      SELECT rowid FROM quotes_fts WHERE quotes_fts MATCH ${ftsQuery}
+    `
+    if (ftsResults.length === 0) {
+      clipIdSet = new Set()
+    } else {
+      const quoteIds = ftsResults.map(r => Number(r.rowid))
       const rows = await prisma.quote.findMany({
-        where: { ...baseFilter, text: { contains: token.value } },
-        select: { clipId: true, text: true },
+        where: { id: { in: quoteIds }, ...baseFilter },
+        select: { clipId: true },
         distinct: ['clipId'],
       })
-      // Post-filter for word boundary on non-exact tokens
-      const ids = new Set(
-        rows
-          .filter(r => quoteMatchesToken(r.text, token))
-          .map(r => r.clipId)
-      )
-      if (clipIdSet === null) { clipIdSet = ids } else { const prev: Set<number> = clipIdSet; clipIdSet = new Set([...prev].filter(id => ids.has(id))) }
-      if (clipIdSet.size === 0) break
+      clipIdSet = new Set(rows.map(r => r.clipId))
     }
-    clipIdSet ??= new Set<number>()
   } else {
-    // No text query — base filter only
     const rows = await prisma.quote.findMany({
       where: baseFilter,
       select: { clipId: true },
       distinct: ['clipId'],
     })
     clipIdSet = new Set(rows.map(r => r.clipId))
-  }
-
-  // Apply exclusions
-  for (const token of excludeTokens) {
-    if (clipIdSet.size === 0) break
-    const rows = await prisma.quote.findMany({
-      where: { text: { contains: token.value } },
-      select: { clipId: true, text: true },
-    })
-    const excludedIds = new Set(
-      rows.filter(r => quoteMatchesToken(r.text, token)).map(r => r.clipId)
-    )
-    clipIdSet = new Set([...clipIdSet].filter(id => !excludedIds.has(id)))
   }
 
   const totalClips = clipIdSet.size
@@ -196,29 +158,10 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
     take: limit,
   })
 
-  const highlightTerms = getHighlightTerms(tokens)
-
-  // Build a hint for the user about what was parsed
-  const searchHint = tokens.length > 1 || excludeTokens.length > 0 ? (
-    <span style={{ fontSize: '0.75rem', color: '#888', marginLeft: '0.5rem' }}>
-      {includeTokens.map((t, i) => (
-        <span key={i}>
-          {i > 0 && <span style={{ color: '#ccc' }}> AND </span>}
-          <span style={{ background: '#fff8dc', border: '1px solid #e6c400', borderRadius: '3px', padding: '0 4px', fontWeight: 600, color: '#555' }}>
-            {t.exact ? `"${t.value}"` : t.value}
-          </span>
-        </span>
-      ))}
-      {excludeTokens.map((t, i) => (
-        <span key={i}>
-          <span style={{ color: '#ccc' }}> NOT </span>
-          <span style={{ background: '#fff0f0', border: '1px solid #ffb3b3', borderRadius: '3px', padding: '0 4px', fontWeight: 600, color: '#c00' }}>
-            {t.exact ? `"${t.value}"` : t.value}
-          </span>
-        </span>
-      ))}
-    </span>
-  ) : null
+  // Terms to highlight: words from the query
+  const highlightTerms = hasTextQuery
+    ? q.trim().toUpperCase().replace(/["*^()]/g, ' ').split(/\s+/).filter(t => t.length > 0)
+    : []
 
   return (
     <div style={{ marginTop: '1.5rem' }}>
@@ -227,7 +170,6 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
         <p style={{ fontSize: '0.8125rem', color: '#555', margin: 0 }}>
           <strong style={{ color: '#1a1a1a' }}>{totalClips.toLocaleString()}</strong> clip{totalClips !== 1 ? 's' : ''} found
           {totalPages > 1 && <span style={{ color: '#888' }}> &mdash; page {clampedPage} of {totalPages}</span>}
-          {searchHint}
         </p>
         <Suspense>
           <PageSizeSelector current={limit} />
@@ -240,14 +182,13 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
           const ep = clip.episode
           const quotes = clip.quotes
 
-          // Which quote rows match any include term
           const matchingIndices = new Set<number>()
-          if (includeTokens.length > 0) {
+          if (highlightTerms.length > 0) {
             quotes.forEach((qt, i) => {
-              if (includeTokens.some(t => quoteMatchesToken(qt.text, t))) matchingIndices.add(i)
+              if (highlightTerms.some(t => qt.text.toUpperCase().includes(t))) matchingIndices.add(i)
             })
           }
-          // Visible quotes: matching ± 1 context; if no text query, show all
+
           let visibleQuotes: typeof quotes
           if (matchingIndices.size > 0) {
             const vis = new Set<number>()
@@ -263,7 +204,6 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
 
           return (
             <ClickableCard key={clip.id} href={buildClipUrl(clip.id, q, showId, season, episodeId, speakerName)}>
-              {/* Episode header */}
               <div style={{ padding: '0.5rem 0.875rem', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <span style={{ background: '#FED90F', border: '1px solid #e6c400', borderRadius: '4px', padding: '0.1rem 0.45rem', fontSize: '0.6875rem', fontWeight: 700, color: '#1a1a1a', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
                   {ep.show.name}
@@ -276,11 +216,10 @@ export default async function SearchResults({ q, showId, season, episodeId, spea
                 </span>
               </div>
 
-              {/* Quotes */}
               <div>
                 {visibleQuotes.map((quote, i) => {
                   const isMatch = matchingIndices.size > 0 &&
-                    includeTokens.some(t => quoteMatchesToken(quote.text, t))
+                    highlightTerms.some(t => quote.text.toUpperCase().includes(t))
                   return (
                     <div
                       key={quote.id}
