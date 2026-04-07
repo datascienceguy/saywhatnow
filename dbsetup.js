@@ -9,7 +9,6 @@ const env = { ...process.env }
   // prepare database — resolve any stuck failed migrations first
   await execOptional('npx prisma migrate resolve --applied 20260405000000_add_quotes_fts')
   await exec('npx prisma migrate deploy')
-  await exec('npx next build --experimental-build-mode generate')
 
   // launch application
   if (process.env.BUCKET_NAME) {
