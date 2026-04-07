@@ -6,7 +6,8 @@ const env = { ...process.env }
 
 ;(async() => {
 
-  // prepare database
+  // prepare database — resolve any stuck failed migrations first
+  await execOptional('npx prisma migrate resolve --applied 20260405000000_add_quotes_fts')
   await exec('npx prisma migrate deploy')
   await exec('npx next build --experimental-build-mode generate')
 
@@ -28,5 +29,12 @@ function exec(command) {
         reject(new Error(`${command} failed rc=${code}`))
       }
     })
+  })
+}
+
+function execOptional(command) {
+  const child = spawn(command, { shell: true, stdio: 'inherit', env })
+  return new Promise(resolve => {
+    child.on('exit', () => resolve())
   })
 }
