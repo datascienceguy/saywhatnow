@@ -29,6 +29,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/dbsetup.js ./dbsetup.js
 
 # DB lives on a persistent volume mounted at /data
 RUN mkdir -p /data && chown nextjs:nodejs /data
@@ -38,4 +39,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["node", "dbsetup.js", "node", "server.js"]
