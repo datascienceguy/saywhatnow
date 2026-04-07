@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Simpsonfont';
+  src: url('/fonts/Simpsonfont.woff2') format('woff2'),
+       url('/fonts/Simpsonfont.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --font-bangers: 'Simpsonfont', cursive;
   --background: #87CEEB;
   --foreground: #1a1a1a;
   --yellow: #FED90F;

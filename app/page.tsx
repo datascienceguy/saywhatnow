@@ -34,7 +34,7 @@ export default async function HomePage({ searchParams }: PageProps) {
         userName={session?.user?.name}
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
-        subtitle={<span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.4rem', letterSpacing: '0.05em', lineHeight: 1 }}>The Simpsons</span>}
+        subtitle="The Simpsons"
       />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
@@ -55,7 +55,7 @@ export default async function HomePage({ searchParams }: PageProps) {
                 Try searching for
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                {["don't have a cow", "d'oh", "excellent", "eat my shorts", "okily dokily", "worst episode ever"].map(example => (
+                {["don't have a cow", "d'oh", "excellent", "eat my shorts", "embiggens", "kwyjibo"].map(example => (
                   <a
                     key={example}
                     href={`/?q=${encodeURIComponent(example)}`}

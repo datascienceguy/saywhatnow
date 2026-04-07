@@ -9,13 +9,13 @@ interface Props {
 
 export default function SignOutButton({ name, image }: Props) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
       {image && (
-        <img src={image} alt={name ?? ''} style={{ width: '1.75rem', height: '1.75rem', borderRadius: '50%', border: '2px solid #1a1a1a' }} />
+        <img src={image} alt={name ?? ''} style={{ width: '1.6rem', height: '1.6rem', borderRadius: '50%', border: '2px solid #1a1a1a' }} />
       )}
       <button
         onClick={() => signOut({ callbackUrl: '/login' })}
-        style={{ background: 'none', border: '1px solid #1a1a1a', borderRadius: '4px', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', color: '#1a1a1a' }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#1a1a1a', padding: 0 }}
       >
         Sign out
       </button>

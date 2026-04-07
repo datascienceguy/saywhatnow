@@ -6,7 +6,8 @@ import prisma from '@/lib/prisma'
 import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
 import { toTitleCase } from '@/lib/display'
-import SpeakerDonut from '@/app/components/SpeakerDonut'
+import nextDynamic from 'next/dynamic'
+const SpeakerDonut = nextDynamic(() => import('@/app/components/SpeakerDonut'))
 
 interface Props {
   params: Promise<{ id: string }>
@@ -95,7 +96,7 @@ export default async function EpisodePage({ params }: Props) {
             {episode.show.name} · Season {episode.season}, Episode {episode.episodeNumber}
             {episode.productionCode && <span style={{ marginLeft: '0.5rem', color: '#bbb' }}>({episode.productionCode})</span>}
           </div>
-          <h1 style={{ fontFamily: 'var(--font-bangers)', fontSize: '2rem', letterSpacing: '0.05em', margin: 0, lineHeight: 1.1 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, lineHeight: 1.1 }}>
             {toTitleCase(episode.title)}
           </h1>
           {airDateStr && (
