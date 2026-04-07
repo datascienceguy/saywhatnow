@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma'
 import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
 import { toTitleCase } from '@/lib/display'
+import SeasonBars from '@/app/components/SeasonBars'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -54,11 +55,13 @@ export default async function SpeakerPage({ params }: Props) {
     a.season < b.season || (a.season === b.season && a.episodeNumber < b.episodeNumber) ? a : b
   )
 
-  // Most active season
+  // Most active season (by word count)
   const seasonCounts: Record<number, number> = {}
-  for (const q of quotes) seasonCounts[q.episode.season] = (seasonCounts[q.episode.season] ?? 0) + 1
+  for (const q of quotes) {
+    const words = q.text.trim().split(/\s+/).filter(Boolean).length
+    seasonCounts[q.episode.season] = (seasonCounts[q.episode.season] ?? 0) + words
+  }
   const mostActiveSeason = Number(Object.entries(seasonCounts).sort((a, b) => b[1] - a[1])[0][0])
-  const mostActiveSeasonLines = seasonCounts[mostActiveSeason]
 
   // Most repeated quote
   const textCounts: Record<string, number> = {}
@@ -132,7 +135,15 @@ export default async function SpeakerPage({ params }: Props) {
           {statCard('Episodes', episodeCount)}
           {statCard('Clips', clipCount.toLocaleString())}
           {statCard('Avg words / line', avgWords)}
-          {statCard('Most active season', `Season ${mostActiveSeason}`, `${mostActiveSeasonLines.toLocaleString()} lines`)}
+
+        </div>
+
+        {/* Lines per season chart */}
+        <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+            Words per Season
+          </div>
+          <SeasonBars seasonCounts={seasonCounts} mostActiveSeason={mostActiveSeason} />
         </div>
 
         {/* Most repeated quote */}

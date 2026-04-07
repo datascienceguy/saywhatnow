@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma'
 import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
 import { toTitleCase } from '@/lib/display'
+import SpeakerDonut from '@/app/components/SpeakerDonut'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -39,19 +40,21 @@ export default async function EpisodePage({ params }: Props) {
   const avgClipDuration = clips.length ? Math.round(totalDuration / clips.length) : 0
 
   // Speaker breakdown
-  const speakerQuoteCounts = new Map<number, { name: string; imageUrl: string | null; imagePosition: string | null; count: number }>()
+  const speakerStats = new Map<number, { name: string; imageUrl: string | null; imagePosition: string | null; quotes: number; words: number }>()
   for (const clip of clips) {
     for (const q of clip.quotes) {
       if (!q.speakerId || !q.speaker) continue
-      const entry = speakerQuoteCounts.get(q.speakerId) ?? { name: q.speaker.name, imageUrl: q.speaker.imageUrl, imagePosition: q.speaker.imagePosition, count: 0 }
-      entry.count++
-      speakerQuoteCounts.set(q.speakerId, entry)
+      const entry = speakerStats.get(q.speakerId) ?? { name: q.speaker.name, imageUrl: q.speaker.imageUrl, imagePosition: q.speaker.imagePosition, quotes: 0, words: 0 }
+      entry.quotes++
+      entry.words += q.text.trim().split(/\s+/).filter(Boolean).length
+      speakerStats.set(q.speakerId, entry)
     }
   }
-  const speakerList = [...speakerQuoteCounts.entries()]
+  const speakerList = [...speakerStats.entries()]
     .map(([id, v]) => ({ id, ...v }))
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => b.words - a.words)
   const speakerCount = speakerList.length
+  const totalSpeakerWords = speakerList.reduce((n, sp) => n + sp.words, 0)
 
   // Random quote
   const allQuotes = clips.flatMap(c => c.quotes.map(q => ({ ...q, clipId: c.id })))
@@ -115,9 +118,10 @@ export default async function EpisodePage({ params }: Props) {
             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
               Speaker Breakdown
             </div>
+            <SpeakerDonut speakers={speakerList.map(sp => ({ id: sp.id, name: sp.name, words: sp.words, quotes: sp.quotes }))} totalWords={totalSpeakerWords} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {speakerList.map(sp => {
-                const pct = quoteCount ? Math.round((sp.count / quoteCount) * 100) : 0
+                const pct = totalSpeakerWords ? Math.round((sp.words / totalSpeakerWords) * 100) : 0
                 return (
                   <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <a href={`/speaker/${sp.id}`} style={{ flexShrink: 0, display: 'block' }}>
@@ -130,7 +134,7 @@ export default async function EpisodePage({ params }: Props) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', fontSize: '0.8rem' }}>
                         <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toTitleCase(sp.name)}</span>
-                        <span style={{ color: '#888', flexShrink: 0, marginLeft: '0.5rem' }}>{sp.count} lines · {pct}%</span>
+                        <span style={{ color: '#888', flexShrink: 0, marginLeft: '0.5rem' }}>{pct}% ({sp.quotes} lines)</span>
                       </div>
                       <div style={{ background: '#f0f0f0', borderRadius: '3px', height: '6px', overflow: 'hidden' }}>
                         <div style={{ background: '#FED90F', height: '100%', width: `${pct}%`, borderRadius: '3px' }} />
