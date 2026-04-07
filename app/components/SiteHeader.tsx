@@ -31,13 +31,13 @@ export default async function SiteHeader({ userName, userImage, isAdmin, back, s
       {subtitle && (
         <div className="site-header-subtitle">
           <span className="chevron" style={{ color: '#888', fontSize: '0.85rem', flexShrink: 0 }}>›</span>
-          <span style={{ fontSize: '1rem', color: '#1a1a1a', fontFamily: 'var(--font-bangers)', letterSpacing: '0.03em' }}>{subtitle}</span>
+          <span style={{ fontSize: '1.3rem', color: '#1a1a1a', fontFamily: 'var(--font-bangers)', letterSpacing: '0.03em' }}>{subtitle}</span>
         </div>
       )}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
-        <Link href="/random" style={navLink}>Random clip</Link>
+        <Link href="/random" style={navLink}>🎲 Random</Link>
         {simpsonsShow && (
-          <Link href={`/show/${simpsonsShow.id}`} style={navLink}>Browse episodes</Link>
+          <Link href={`/show/${simpsonsShow.id}`} style={navLink}>📺 Episodes</Link>
         )}
         <GamesMenu />
         {isAdmin && (
