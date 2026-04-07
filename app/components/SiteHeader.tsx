@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import GamesMenu from './GamesMenu'
 import SignOutButton from './SignOutButton'
 import BackButton from './BackButton'
@@ -21,9 +20,14 @@ export default async function SiteHeader({ userName, userImage, isAdmin, back, s
   return (
     <header className="site-header">
       {back && <BackButton />}
-      <Link href="/" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-        <Image src="/pictures/saywhatnow.jpg" alt="SayWhatNow" width={80} height={28} style={{ objectFit: 'contain', display: 'block', mixBlendMode: 'multiply' }} />
-      </Link>
+      <Link href="/" className="logo-bubble" style={{
+        position: 'relative', display: 'inline-block',
+        background: 'white', border: '2px solid #1a1a1a', borderRadius: '10px',
+        padding: '0.15rem 0.6rem 0.1rem', fontFamily: 'var(--font-bangers)',
+        fontSize: '1.3rem', color: '#1a1a1a', letterSpacing: '0.04em',
+        lineHeight: 1, whiteSpace: 'nowrap', boxShadow: '2px 2px 0 #1a1a1a',
+        textDecoration: 'none',
+      }}>SayWhatNow</Link>
       {subtitle && (
         <div className="site-header-subtitle">
           <span className="chevron" style={{ color: '#888', fontSize: '0.85rem', flexShrink: 0 }}>›</span>
