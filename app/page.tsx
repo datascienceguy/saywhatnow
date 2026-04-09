@@ -17,6 +17,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const shows = await prisma.show.findMany({ orderBy: { name: 'asc' } })
   const simpsons = shows.find(s => s.name.toUpperCase().includes('SIMPSONS'))
   const scrubs = shows.find(s => s.name.toUpperCase().includes('SCRUBS'))
+  const office = shows.find(s => s.name.toUpperCase().includes('OFFICE'))
   const episodes = simpsons ? await prisma.episode.findMany({
     where: { showId: simpsons.id },
     select: { id: true, showId: true, season: true, episodeNumber: true, title: true },
@@ -85,6 +86,11 @@ export default async function HomePage({ searchParams }: PageProps) {
             {scrubs && (
               <a href="/scrubs" style={{ fontSize: '0.75rem', color: '#888', textDecoration: 'underline' }}>
                 Also search Scrubs
+              </a>
+            )}
+            {office && (
+              <a href="/office" style={{ fontSize: '0.75rem', color: '#888', textDecoration: 'underline' }}>
+                Also search The Office
               </a>
             )}
           </div>
