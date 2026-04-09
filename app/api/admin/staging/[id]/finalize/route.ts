@@ -48,7 +48,16 @@ async function importEpisodeToDB(payload: ImportPayload) {
   let episode = await prisma.episode.findFirst({
     where: { showId: show.id, season: payload.season, episodeNumber: payload.episodeNumber },
   })
-  if (!episode) {
+  if (episode) {
+    // Delete existing clips/quotes so re-finalization doesn't create duplicates
+    const existingClips = await prisma.clip.findMany({ where: { episodeId: episode.id }, select: { id: true } })
+    const clipIds = existingClips.map(c => c.id)
+    if (clipIds.length) {
+      await prisma.clipSpeaker.deleteMany({ where: { clipId: { in: clipIds } } })
+      await prisma.quote.deleteMany({ where: { clipId: { in: clipIds } } })
+      await prisma.clip.deleteMany({ where: { episodeId: episode.id } })
+    }
+  } else {
     episode = await prisma.episode.create({
       data: {
         showId: show.id,
