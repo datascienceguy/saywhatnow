@@ -12,6 +12,22 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(ep)
 }
 
+// DELETE /api/admin/staging?basename=office-s01e01 — delete a staging episode and all its quotes/clips
+export async function DELETE(req: NextRequest) {
+  const basename = req.nextUrl.searchParams.get('basename')
+  if (!basename) return NextResponse.json({ error: 'basename required' }, { status: 400 })
+  const ep = await prisma.stagingEpisode.findUnique({ where: { basename } })
+  if (!ep) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (ep.status === 'FINALIZED') return NextResponse.json({ error: 'Cannot delete a finalized episode' }, { status: 409 })
+
+  await prisma.$transaction(async (tx) => {
+    await tx.stagingQuote.deleteMany({ where: { stagingEpisodeId: ep.id } })
+    await tx.stagingClip.deleteMany({ where: { stagingEpisodeId: ep.id } })
+    await tx.stagingEpisode.delete({ where: { id: ep.id } })
+  })
+  return NextResponse.json({ ok: true })
+}
+
 // POST /api/admin/staging — create a new staging episode and seed quotes from JSON
 export async function POST(req: NextRequest) {
   const body = await req.json()

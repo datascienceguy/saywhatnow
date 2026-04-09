@@ -604,7 +604,7 @@ def main():
     # Step 6: parse transcript + generate quotes
     quotes_path = episode_dir / f"{basename}-quotes.json"
     if args.regen_quotes and quotes_path.exists():
-        print("\n--regen-quotes: deleting cached quotes...")
+        print("\n--regen-quotes: deleting cached quotes JSON...")
         quotes_path.unlink()
 
     scene_breaks: list[int] = []
@@ -669,6 +669,21 @@ def main():
     secret = env.get("INTERNAL_API_SECRET", "")
 
     import urllib.request
+
+    # If regen-quotes was requested, delete the old staging episode so quotes get recreated with new timestamps
+    if args.regen_quotes:
+        try:
+            req = urllib.request.Request(
+                f"{base_url}/api/admin/staging?basename={basename}",
+                headers={"x-internal-secret": secret},
+                method="DELETE",
+            )
+            with urllib.request.urlopen(req) as r:
+                json.loads(r.read())
+            print(f"\n--regen-quotes: deleted existing staging episode, will recreate with updated timestamps")
+        except Exception:
+            pass  # didn't exist, that's fine
+
     try:
         req = urllib.request.Request(
             f"{base_url}/api/admin/staging?basename={basename}",
