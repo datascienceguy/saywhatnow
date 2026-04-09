@@ -52,6 +52,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const unique = [...new Set(stagingQuotes.map(q => q.speaker.trim()).filter(Boolean))]
 
   const mappings = unique.map(stagingName => {
+    if (dbSpeakers.length === 0) return { stagingName, suggestedName: null, suggestedScore: 0 }
     const scored = dbSpeakers.map(s => ({
       ...s,
       score: score(stagingName, s.name, s._count.quotes, maxQuotes),
