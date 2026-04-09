@@ -553,9 +553,10 @@ def main():
     parser.add_argument("--no-subtitles", action="store_true", help="Skip SRT extraction")
     parser.add_argument("--no-convert", action="store_true", help="Skip MP4 conversion")
     parser.add_argument("--regen-quotes", action="store_true", help="Regenerate quotes JSON")
+    parser.add_argument("--srt-offset", type=float, default=0.0, help="Seconds to add to all SRT timestamps (e.g. 22 if MP4 has a 22s intro not in the SRT)")
     args = parser.parse_args()
 
-    season, episode = args.season, args.episode
+    season, episode, srt_offset = args.season, args.episode, args.srt_offset
     basename = f"office-s{season:02d}e{episode:02d}"
     episode_dir = Path("clip_prep") / basename
     episode_dir.mkdir(parents=True, exist_ok=True)
@@ -620,6 +621,9 @@ def main():
         if srt_path_str:
             srt = parse_srt(srt_path_str)
             print(f"  SRT: {len(srt)} entries")
+            if srt_offset:
+                print(f"  Applying SRT offset: +{srt_offset}s")
+                srt = [{**e, "start": e["start"] + srt_offset, "end": e["end"] + srt_offset} for e in srt]
             matched = match_transcript_to_srt(transcript_entries, srt)
             n_difflib = sum(1 for m in matched if m.get("match_method") == "difflib")
             n_fuzzy   = sum(1 for m in matched if m.get("match_method") == "fuzzy")
