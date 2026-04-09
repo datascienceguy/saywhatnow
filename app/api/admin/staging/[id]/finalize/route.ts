@@ -245,20 +245,25 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     await importEpisodeToDB(importPayload)
     send('Local database updated ✓')
 
-    // Push to prod if configured
+    // Push to prod if configured (non-fatal — local finalization succeeds regardless)
     const prodUrl = process.env.PROD_API_URL
     if (prodUrl) {
       send(`Pushing to production (${prodUrl})…`)
-      const res = await fetch(`${prodUrl}/api/admin/import-episode`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET! },
-        body: JSON.stringify(importPayload),
-      })
-      if (!res.ok) {
-        const msg = await res.text()
-        throw new Error(`Prod import failed (HTTP ${res.status}): ${msg}`)
+      try {
+        const res = await fetch(`${prodUrl}/api/admin/import-episode`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET! },
+          body: JSON.stringify(importPayload),
+        })
+        if (!res.ok) {
+          const msg = await res.text()
+          send(`WARNING: Prod import failed (HTTP ${res.status}): ${msg} — episode is in local DB only`)
+        } else {
+          send('Production database updated ✓')
+        }
+      } catch (err) {
+        send(`WARNING: Prod push failed: ${err} — episode is in local DB only`)
       }
-      send('Production database updated ✓')
     }
 
     await prisma.stagingEpisode.update({ where: { id: epId }, data: { status: 'COMPLETE' } })
