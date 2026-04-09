@@ -75,7 +75,7 @@ export default async function ShowPage({ params }: Props) {
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
         back
-        subtitle={show.name}
+        subtitle={<span style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.1rem', letterSpacing: '0.03em' }}>{toTitleCase(show.name)}</span>}
       />
 
       <div style={{ maxWidth: '800px', margin: '2rem auto', padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

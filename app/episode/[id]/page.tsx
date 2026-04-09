@@ -82,7 +82,7 @@ export default async function EpisodePage({ params }: Props) {
         back
         subtitle={
           <>
-            <Link href={`/show/${episode.show.id}`} style={{ color: '#3a2800', textDecoration: 'none' }}>{episode.show.name}</Link>
+            <Link href={`/show/${episode.show.id}`} style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.1rem', letterSpacing: '0.03em', color: '#3a2800', textDecoration: 'none' }}>{toTitleCase(episode.show.name)}</Link>
             {' › '}S{episode.season}E{String(episode.episodeNumber).padStart(2, '0')} — {toTitleCase(episode.title)}
           </>
         }

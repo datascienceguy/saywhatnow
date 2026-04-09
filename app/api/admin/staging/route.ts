@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 // POST /api/admin/staging — create a new staging episode and seed quotes from JSON
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { season, episodeNumber, title, airDate, productionCode, basename } = body
+  const { season, episodeNumber, title, airDate, productionCode, basename, showName } = body
 
   if (!season || !episodeNumber || !title || !basename) {
     return NextResponse.json({ error: 'season, episodeNumber, title, basename required' }, { status: 400 })
@@ -33,10 +33,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Quotes not found: clip_prep/${basename}/${basename}-quotes.json` }, { status: 400 })
   }
 
-  // The Simpsons show — hardcoded for now
-  const show = await prisma.show.findFirst({ where: { name: { contains: 'Simpsons' } } })
+  // Look up show by name (defaults to Simpsons for backward compat)
+  const showSearch = showName ?? 'Simpsons'
+  const show = await prisma.show.findFirst({ where: { name: { contains: showSearch.toUpperCase() } } })
   if (!show) {
-    return NextResponse.json({ error: 'Simpsons show not found in DB' }, { status: 500 })
+    return NextResponse.json({ error: `Show not found in DB: ${showSearch}` }, { status: 500 })
   }
 
   // Check for existing staging episode
@@ -73,11 +74,12 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const prefixQuotes = [
+    const isSimpsons = show.name.includes('SIMPSONS')
+    const prefixQuotes = isSimpsons ? [
       { speaker: 'CHORUS', text: 'THE SIMPSONS', sequence: 0 },
       { speaker: 'CHALKBOARD', text: '', sequence: 1 },
       { speaker: 'HOMER SIMPSON', text: 'AHH!', sequence: 2 },
-    ]
+    ] : []
 
     await tx.stagingQuote.createMany({
       data: [
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
           startTime: q.startTime ?? null,
           endTime: q.endTime ?? null,
           matchMethod: q.matchMethod ?? null,
-          sequence: i + 3,
+          sequence: i + prefixQuotes.length,
         })),
       ],
     })

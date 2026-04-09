@@ -31,7 +31,7 @@ export default async function SiteHeader({ userName, userImage, isAdmin, back, s
       {subtitle && (
         <div className="site-header-subtitle">
           <span className="chevron" style={{ color: '#888', fontSize: '0.85rem', flexShrink: 0 }}>›</span>
-          <span style={{ fontSize: '1.3rem', color: '#1a1a1a', fontFamily: 'var(--font-bangers)', letterSpacing: '0.03em' }}>{subtitle}</span>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1a1a1a' }}>{subtitle}</span>
         </div>
       )}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>

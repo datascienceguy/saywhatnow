@@ -114,8 +114,8 @@ model StagingClip {
   id               Int            @id @default(autoincrement())
   stagingEpisodeId Int
   index            Int
-  startTime        Float
-  endTime          Float
+  startTime        Float?
+  endTime          Float?
   stagingEpisode   StagingEpisode @relation(fields: [stagingEpisodeId], references: [id])
   quotes           StagingQuote[]
 }

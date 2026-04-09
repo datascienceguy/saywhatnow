@@ -106,7 +106,7 @@ export default async function SpeakerPage({ params }: Props) {
         userImage={session?.user?.image}
         isAdmin={(session?.user as { role?: string })?.role === 'ADMIN'}
         back
-        subtitle={<><Link href={`/show/${speaker.show.id}`} style={{ color: '#1a1a1a', textDecoration: 'none' }}>{toTitleCase(speaker.show.name)}</Link>{' › '}{toTitleCase(speaker.name)}</>}
+        subtitle={<><Link href={`/show/${speaker.show.id}`} style={{ fontFamily: 'var(--font-bangers)', fontSize: '1.1rem', letterSpacing: '0.03em', color: '#1a1a1a', textDecoration: 'none' }}>{toTitleCase(speaker.show.name)}</Link>{' › '}{toTitleCase(speaker.name)}</>}
       />
 
       <div style={{ maxWidth: '720px', margin: '2rem auto', padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

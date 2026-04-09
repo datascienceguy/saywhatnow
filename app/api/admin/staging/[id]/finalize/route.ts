@@ -151,6 +151,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const stream = makeStream(async () => { throw new Error('No clips defined — add clip boundaries before finalizing') })
     return new Response(stream, { headers: sseHeaders() })
   }
+  const clipsWithoutTimes = staging.clips.filter(c => c.startTime == null || c.endTime == null)
+  if (clipsWithoutTimes.length > 0) {
+    const stream = makeStream(async () => { throw new Error(`${clipsWithoutTimes.length} clip(s) have no start/end times — set times in the staging editor before finalizing`) })
+    return new Response(stream, { headers: sseHeaders() })
+  }
 
   const stream = makeStream(async (send) => {
     const ffmpeg = findFfmpeg()
@@ -177,7 +182,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     for (const stagingClip of staging.clips) {
       const filename = `${staging.season}-${staging.episodeNumber}_${stagingClip.index}.mp4`
       const outPath = path.join(outDir, filename)
-      const duration = stagingClip.endTime - stagingClip.startTime
+      const duration = stagingClip.endTime! - stagingClip.startTime!
       const clipQuotes = staging.quotes.filter(q => q.stagingClipId === stagingClip.id)
 
       send(`[${stagingClip.index}/${total}] Cutting ${filename} (${duration.toFixed(1)}s, ${clipQuotes.length} lines)…`)
@@ -185,7 +190,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       try {
         await execFileAsync(ffmpeg, [
           '-y',
-          '-ss', String(stagingClip.startTime),
+          '-ss', String(stagingClip.startTime!),
           '-i', staging.videoPath,
           '-t', String(duration),
           '-c:v', 'copy',

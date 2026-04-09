@@ -6,7 +6,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const epId = Number(id)
   const { clips } = await req.json() as {
-    clips: Array<{ index: number; startTime: number; endTime: number }>
+    clips: Array<{
+      index: number
+      startTime?: number | null
+      endTime?: number | null
+      // sequence-based assignment (for episodes without timestamps)
+      sequenceStart?: number
+      sequenceEnd?: number
+    }>
   }
 
   await prisma.$transaction(async (tx) => {
@@ -19,18 +26,35 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Create new clips
     for (const c of clips) {
-      const clip = await tx.stagingClip.create({
-        data: { stagingEpisodeId: epId, index: c.index, startTime: c.startTime, endTime: c.endTime },
-      })
+      const startTime = c.startTime ?? null
+      const endTime = c.endTime ?? null
 
-      // Assign quotes whose startTime falls within this clip
-      await tx.stagingQuote.updateMany({
-        where: {
-          stagingEpisodeId: epId,
-          startTime: { gte: c.startTime, lte: c.endTime },
-        },
-        data: { stagingClipId: clip.id },
-      })
+      // Use raw SQL to support nullable startTime/endTime
+      const [clip] = await tx.$queryRaw<{ id: number }[]>`
+        INSERT INTO "StagingClip" ("stagingEpisodeId", "index", "startTime", "endTime")
+        VALUES (${epId}, ${c.index}, ${startTime}, ${endTime})
+        RETURNING id
+      `
+
+      if (c.sequenceStart != null && c.sequenceEnd != null) {
+        // Sequence-based assignment: assign quotes by sequence range
+        await tx.stagingQuote.updateMany({
+          where: {
+            stagingEpisodeId: epId,
+            sequence: { gte: c.sequenceStart, lte: c.sequenceEnd },
+          },
+          data: { stagingClipId: clip.id },
+        })
+      } else if (startTime != null && endTime != null) {
+        // Timestamp-based assignment (original behavior)
+        await tx.stagingQuote.updateMany({
+          where: {
+            stagingEpisodeId: epId,
+            startTime: { gte: startTime, lte: endTime },
+          },
+          data: { stagingClipId: clip.id },
+        })
+      }
     }
 
     await tx.stagingEpisode.update({

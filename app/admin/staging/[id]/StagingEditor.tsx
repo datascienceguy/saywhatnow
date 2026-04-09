@@ -16,8 +16,8 @@ type Quote = {
 type Clip = {
   id: number
   index: number
-  startTime: number
-  endTime: number
+  startTime: number | null
+  endTime: number | null
 }
 
 type Episode = {
