@@ -4,19 +4,37 @@ import { writeFile } from 'fs/promises'
 import path from 'path'
 import { uploadToR2 } from '@/lib/r2'
 
+const WIKI_HOSTS: Record<string, string> = {
+  SIMPSONS: 'simpsons.fandom.com',
+  OFFICE: 'theoffice.fandom.com',
+  SCRUBS: 'scrubs.fandom.com',
+}
+
+function wikiHostForShow(showName: string): string {
+  const upper = showName.toUpperCase()
+  for (const [key, host] of Object.entries(WIKI_HOSTS)) {
+    if (upper.includes(key)) return host
+  }
+  return 'simpsons.fandom.com'
+}
+
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const speakerId = Number(id)
 
-  const speaker = await prisma.speaker.findUnique({ where: { id: speakerId } })
+  const speaker = await prisma.speaker.findUnique({
+    where: { id: speakerId },
+    include: { show: true },
+  })
   if (!speaker) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const searchName = toTitleCase(speaker.name)
+  const wikiHost = wikiHostForShow(speaker.show.name)
 
-  const wikiImageUrl = await fetchWikiImage(searchName)
+  const wikiImageUrl = await fetchWikiImage(searchName, wikiHost)
 
   if (!wikiImageUrl) {
-    return NextResponse.json({ error: `No image found for "${searchName}" on Simpsons wiki` }, { status: 404 })
+    return NextResponse.json({ error: `No image found for "${searchName}" on ${wikiHost}` }, { status: 404 })
   }
 
   const imgRes = await fetch(wikiImageUrl)
@@ -43,8 +61,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ imageUrl, wikiTitle: searchName })
 }
 
-async function fetchWikiImage(title: string): Promise<string | null> {
-  const url = `https://simpsons.fandom.com/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages&format=json&pithumbsize=400&redirects=1`
+async function fetchWikiImage(title: string, wikiHost: string): Promise<string | null> {
+  const url = `https://${wikiHost}/api.php?action=query&titles=${encodeURIComponent(title)}&prop=pageimages&format=json&pithumbsize=400&redirects=1`
   const res = await fetch(url)
   if (!res.ok) return null
   const data = await res.json()
