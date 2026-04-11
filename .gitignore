@@ -55,3 +55,4 @@ prisma/*.db-wal
 # Episode processing working directory (large video files)
 /clips/
 /clip_prep/
+/office_prep/
