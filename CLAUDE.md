@@ -100,7 +100,7 @@ prisma/
   dev.db                          # Local SQLite database (gitignored)
 
 scripts/
-  process-episode.py              # Full episode import pipeline (download MKV + transcript, convert, stage)
+  process-simpsons-episode.py     # Full episode import pipeline (download MKV + transcript, convert, stage)
   migrate-legacy.ts               # One-time migration: legacy MySQL dump → dev.db
 
 public/
@@ -161,9 +161,9 @@ Props: `userName`, `userImage`, `isAdmin`, `back` (show back button), `subtitle`
 
 ---
 
-## Episode Import Pipeline (`scripts/process-episode.py`)
+## Episode Import Pipeline (`scripts/process-simpsons-episode.py`)
 
-Single script that handles the full import flow. Run with `uv run scripts/process-episode.py <season> <episode>`.
+Single script that handles the full import flow. Run with `uv run scripts/process-simpsons-episode.py <season> <episode>`.
 
 Steps (each auto-skipped if output already exists):
 1. Download MKV from archive.org
@@ -179,7 +179,7 @@ All episode files stored under `clip_prep/{basename}/`.
 
 ## Adding a New Episode — Full Workflow
 
-1. **Import** — `uv run scripts/process-episode.py <season> <episode>` (downloads MKV, transcript, stages quotes)
+1. **Import** — `uv run scripts/process-simpsons-episode.py <season> <episode>` (downloads MKV, transcript, stages quotes)
 2. **Split clips** — Open `/admin/staging/[id]`, review quotes, add clip boundaries with the video player
 3. **Finalize** — Click Finalize; ffmpeg cuts clips, uploads to R2, imports clips/quotes/speakers to local DB, then automatically pushes to prod DB (requires `PROD_API_URL` in `.env.local`)
 4. **Review speakers** — Go to `/admin/speakers` on prod, fix any auto-created duplicates or misspellings, set speaker types, add photos
@@ -245,7 +245,7 @@ npm run dev                               # start dev server
 npx tsx scripts/migrate-legacy.ts        # run legacy data migration
 npx prisma studio                        # browse database
 npx prisma generate                      # regenerate client after schema changes
-uv run scripts/process-episode.py 1 1    # import S1E1
+uv run scripts/process-simpsons-episode.py 1 1    # import S1E1
 ```
 
 Requires `.env.local` with:
@@ -271,7 +271,7 @@ PROD_API_URL                 # e.g. https://saywhatnow.fly.dev — enables auto-
 - **Video storage** — Cloudflare R2 (zero egress fees)
 - **Games** — Hangman, Match the Quote
 - **Auth** — Google OAuth via next-auth v5, all routes protected
-- **Episode import pipeline** — `process-episode.py` downloads, transcribes, stages full episodes
+- **Episode import pipeline** — `process-simpsons-episode.py` downloads, transcribes, stages full episodes
 - **Admin staging editor** — clip splitting, auto-save, finalize with SSE progress, R2 upload
 - **Site header** — shared `SiteHeader` component with logo, breadcrumb, consistent across all pages
 
