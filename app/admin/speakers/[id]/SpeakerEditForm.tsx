@@ -13,11 +13,21 @@ type Speaker = {
 }
 
 
+function parseFocalPoint(pos: string): [number, number] {
+  const m = pos.match(/([\d.]+)%\s+([\d.]+)%/)
+  if (m) return [parseFloat(m[1]), parseFloat(m[2])]
+  const xMap: Record<string, number> = { left: 0, center: 50, right: 100 }
+  const yMap: Record<string, number> = { top: 0, center: 50, bottom: 100 }
+  const parts = pos.split(' ')
+  return [xMap[parts[0]] ?? 50, yMap[parts[1]] ?? 50]
+}
+
 export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
   const [name, setName] = useState(speaker.name)
   const [type, setType] = useState(speaker.type)
   const [imageUrl, setImageUrl] = useState(speaker.imageUrl ?? '')
   const [imagePosition, setImagePosition] = useState(speaker.imagePosition ?? 'center center')
+  const [zoom, setZoom] = useState(1)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [finding, setFinding] = useState(false)
@@ -128,45 +138,60 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
       </div>
 
       {/* Focal point */}
-      {imageUrl && (
-        <div>
-          <label className="block text-xs text-gray-400 mb-2">Focal Point — click the image to set where the face is</label>
-          <div className="flex gap-4 items-start">
-            {/* Full image — click to set focal point */}
-            <div
-              className="relative shrink-0 cursor-crosshair border border-gray-700 rounded overflow-hidden bg-gray-800"
-              style={{ width: 200, height: 200 }}
-              onClick={e => {
-                const rect = e.currentTarget.getBoundingClientRect()
-                const x = Math.round(((e.clientX - rect.left) / rect.width) * 100)
-                const y = Math.round(((e.clientY - rect.top) / rect.height) * 100)
-                setImagePosition(`${x}% ${y}%`)
-              }}
-            >
-              <img src={preview} alt={name} className="w-full h-full object-contain" />
-              {/* Focal point dot */}
-              {(() => {
-                const parts = imagePosition.match(/(\d+)%\s+(\d+)%/)
-                if (!parts) return null
-                return (
-                  <div
-                    className="absolute w-3 h-3 rounded-full border-2 border-white bg-red-500 pointer-events-none"
-                    style={{ left: `calc(${parts[1]}% - 6px)`, top: `calc(${parts[2]}% - 6px)` }}
-                  />
-                )
-              })()}
-            </div>
-            {/* Circle preview */}
-            <div className="shrink-0">
-              <div className="text-xs text-gray-500 mb-1">Preview</div>
-              <div className="w-20 h-20 rounded-full overflow-hidden border border-gray-700 bg-gray-800">
-                <img src={preview} alt={name} className="w-full h-full object-cover" style={{ objectPosition: imagePosition }} />
+      {imageUrl && (() => {
+        const [fpx, fpy] = parseFocalPoint(imagePosition)
+        return (
+          <div>
+            <label className="block text-xs text-gray-400 mb-2">Focal Point — click the image to set where the face is</label>
+            <div className="flex gap-4 items-start">
+              {/* Full image — click to set focal point, scroll or slider to zoom */}
+              <div
+                className="relative shrink-0 cursor-crosshair border border-gray-700 rounded overflow-hidden bg-gray-800"
+                style={{ width: 200, height: 200 }}
+                onWheel={e => { e.preventDefault(); setZoom(z => Math.min(8, Math.max(1, z - e.deltaY * 0.01))) }}
+                onClick={e => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const originX = rect.width * fpx / 100
+                  const originY = rect.height * fpy / 100
+                  const cx = e.clientX - rect.left
+                  const cy = e.clientY - rect.top
+                  const x = Math.max(0, Math.min(100, Math.round((originX + (cx - originX) / zoom) / rect.width * 100)))
+                  const y = Math.max(0, Math.min(100, Math.round((originY + (cy - originY) / zoom) / rect.height * 100)))
+                  setImagePosition(`${x}% ${y}%`)
+                }}
+              >
+                <img
+                  src={preview} alt={name}
+                  className="w-full h-full object-cover pointer-events-none"
+                  style={{ transform: `scale(${zoom})`, transformOrigin: `${fpx}% ${fpy}%` }}
+                />
+                <div
+                  className="absolute w-3 h-3 rounded-full border-2 border-white bg-red-500 pointer-events-none"
+                  style={{ left: `calc(${fpx}% - 6px)`, top: `calc(${fpy}% - 6px)` }}
+                />
               </div>
-              <div className="text-xs text-gray-600 mt-1 w-20 break-all">{imagePosition}</div>
+              {/* Controls + preview */}
+              <div className="shrink-0 space-y-3">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Zoom ({zoom.toFixed(1)}×)</div>
+                  <input
+                    type="range" min={1} max={8} step={0.1} value={zoom}
+                    onChange={e => setZoom(parseFloat(e.target.value))}
+                    className="w-24 accent-yellow-400"
+                  />
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Preview</div>
+                  <div className="w-20 h-20 rounded-full overflow-hidden border border-gray-700 bg-gray-800">
+                    <img src={preview} alt={name} className="w-full h-full object-cover" style={{ objectPosition: imagePosition }} />
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1 w-20 break-all">{imagePosition}</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <div className="flex items-center gap-3">
         <button
