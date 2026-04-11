@@ -12,12 +12,6 @@ type Speaker = {
   imagePosition: string | null
 }
 
-// 3x3 grid of focal point options (CSS object-position values)
-const FOCAL_POINTS = [
-  ['left top',    'center top',    'right top'],
-  ['left center', 'center center', 'right center'],
-  ['left bottom', 'center bottom', 'right bottom'],
-]
 
 export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
   const [name, setName] = useState(speaker.name)
@@ -86,7 +80,7 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
             onClick={findImage} disabled={finding}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded text-xs text-white font-medium transition-colors"
           >
-            {finding ? 'Searching wiki…' : '🔍 Find on Simpsons Wiki'}
+            {finding ? 'Searching wiki…' : '🔍 Find on Wiki'}
           </button>
           <div>
             <label className="block text-xs text-gray-400 mb-1">Or upload manually</label>
@@ -136,21 +130,39 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
       {/* Focal point */}
       {imageUrl && (
         <div>
-          <label className="block text-xs text-gray-400 mb-2">Focal Point (click to set where the face is)</label>
+          <label className="block text-xs text-gray-400 mb-2">Focal Point — click the image to set where the face is</label>
           <div className="flex gap-4 items-start">
-            <div className="grid grid-cols-3 gap-0.5 w-16 shrink-0">
-              {FOCAL_POINTS.map((row, ri) => row.map((pos, ci) => (
-                <button
-                  key={pos}
-                  title={pos}
-                  onClick={() => setImagePosition(pos)}
-                  className={`w-5 h-5 rounded-sm border transition-colors ${imagePosition === pos ? 'bg-yellow-400 border-yellow-400' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'}`}
-                  style={ri === 0 && ci === 0 ? { borderTopLeftRadius: '4px' } : ri === 0 && ci === 2 ? { borderTopRightRadius: '4px' } : ri === 2 && ci === 0 ? { borderBottomLeftRadius: '4px' } : ri === 2 && ci === 2 ? { borderBottomRightRadius: '4px' } : {}}
-                />
-              )))}
+            {/* Full image — click to set focal point */}
+            <div
+              className="relative shrink-0 cursor-crosshair border border-gray-700 rounded overflow-hidden bg-gray-800"
+              style={{ width: 200, height: 200 }}
+              onClick={e => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const x = Math.round(((e.clientX - rect.left) / rect.width) * 100)
+                const y = Math.round(((e.clientY - rect.top) / rect.height) * 100)
+                setImagePosition(`${x}% ${y}%`)
+              }}
+            >
+              <img src={preview} alt={name} className="w-full h-full object-contain" />
+              {/* Focal point dot */}
+              {(() => {
+                const parts = imagePosition.match(/(\d+)%\s+(\d+)%/)
+                if (!parts) return null
+                return (
+                  <div
+                    className="absolute w-3 h-3 rounded-full border-2 border-white bg-red-500 pointer-events-none"
+                    style={{ left: `calc(${parts[1]}% - 6px)`, top: `calc(${parts[2]}% - 6px)` }}
+                  />
+                )
+              })()}
             </div>
-            <div className="w-20 h-20 rounded-full overflow-hidden border border-gray-700 bg-gray-800 shrink-0">
-              <img src={preview} alt={name} className="w-full h-full object-cover" style={{ objectPosition: imagePosition }} />
+            {/* Circle preview */}
+            <div className="shrink-0">
+              <div className="text-xs text-gray-500 mb-1">Preview</div>
+              <div className="w-20 h-20 rounded-full overflow-hidden border border-gray-700 bg-gray-800">
+                <img src={preview} alt={name} className="w-full h-full object-cover" style={{ objectPosition: imagePosition }} />
+              </div>
+              <div className="text-xs text-gray-600 mt-1 w-20 break-all">{imagePosition}</div>
             </div>
           </div>
         </div>
