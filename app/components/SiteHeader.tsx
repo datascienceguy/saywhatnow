@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import GamesMenu from './GamesMenu'
+import ShowMenu from './ShowMenu'
 import SignOutButton from './SignOutButton'
 import BackButton from './BackButton'
 import prisma from '@/lib/prisma'
@@ -15,7 +16,10 @@ interface Props {
 const navLink = { fontSize: '0.8rem', fontWeight: 600, color: '#1a1a1a', textDecoration: 'none', flexShrink: 0 } as const
 
 export default async function SiteHeader({ userName, userImage, isAdmin, back, subtitle }: Props) {
-  const simpsonsShow = await prisma.show.findFirst({ where: { name: { contains: 'SIMPSONS' } } })
+  const [simpsonsShow, allShows] = await Promise.all([
+    prisma.show.findFirst({ where: { name: { contains: 'SIMPSONS' } } }),
+    prisma.show.findMany({ orderBy: { name: 'asc' } }),
+  ])
 
   return (
     <header className="site-header">
@@ -37,8 +41,9 @@ export default async function SiteHeader({ userName, userImage, isAdmin, back, s
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
         <Link href="/random" style={navLink}>🎲 Random</Link>
         {simpsonsShow && (
-          <Link href={`/show/${simpsonsShow.id}`} style={navLink}>📺 Episodes</Link>
+          <Link href={`/show/${simpsonsShow.id}`} style={navLink}>Episodes</Link>
         )}
+        <ShowMenu shows={allShows} />
         <GamesMenu />
         {isAdmin && (
           <Link href="/admin/staging" style={{ ...navLink, background: '#1a1a1a', color: '#FED90F', padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
