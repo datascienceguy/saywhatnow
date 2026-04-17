@@ -6,6 +6,8 @@ import prisma from '@/lib/prisma'
 import SiteHeader from '@/app/components/SiteHeader'
 import { auth } from '@/auth'
 import { toTitleCase } from '@/lib/display'
+import nextDynamic from 'next/dynamic'
+const SpeakerDonut = nextDynamic(() => import('@/app/components/SpeakerDonut'))
 
 interface Props {
   params: Promise<{ id: string }>
@@ -52,13 +54,20 @@ export default async function ShowPage({ params }: Props) {
   // Most quoted episode
   const mostQuotedEp = episodes.reduce((a, b) => a._count.quotes > b._count.quotes ? a : b)
 
-  // Top speakers
-  const topSpeakers = await prisma.speaker.findMany({
-    where: { showId, quotes: { some: {} } },
-    include: { _count: { select: { quotes: true } } },
-    orderBy: { quotes: { _count: 'desc' } },
-    take: 16,
-  })
+  // Top speakers by word count
+  const topSpeakers = await prisma.$queryRaw<Array<{ id: number; name: string; imageUrl: string | null; imagePosition: string | null; wordCount: bigint; quoteCount: bigint }>>`
+    SELECT s.id, s.name, s.imageUrl, s.imagePosition,
+      COUNT(q.id) as quoteCount,
+      SUM(length(trim(q.text)) - length(replace(trim(q.text), ' ', '')) + 1) as wordCount
+    FROM Speaker s
+    JOIN Quote q ON q.speakerId = s.id
+    JOIN Episode e ON q.episodeId = e.id
+    WHERE e.showId = ${showId}
+    GROUP BY s.id
+    ORDER BY wordCount DESC
+    LIMIT 16
+  `
+  const totalSpeakerWords = topSpeakers.reduce((n, sp) => n + Number(sp.wordCount), 0)
 
   const statCard = (label: string, value: string | number, sub?: string) => (
     <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '2px 2px 0 #1a1a1a', textAlign: 'center' }}>
@@ -142,6 +151,7 @@ export default async function ShowPage({ params }: Props) {
           <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
             Top Speakers
           </div>
+          <SpeakerDonut speakers={topSpeakers.map(sp => ({ id: sp.id, name: sp.name, words: Number(sp.wordCount), quotes: Number(sp.quoteCount) }))} totalWords={totalSpeakerWords} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
             {topSpeakers.map(sp => (
               <Link key={sp.id} href={`/speaker/${sp.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem', width: '4.5rem' }}>
@@ -153,7 +163,7 @@ export default async function ShowPage({ params }: Props) {
                 <span style={{ fontSize: '0.65rem', color: '#444', textAlign: 'center', lineHeight: 1.2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', width: '100%' }}>
                   {toTitleCase(sp.name)}
                 </span>
-                <span style={{ fontSize: '0.6rem', color: '#aaa', textAlign: 'center' }}>{sp._count.quotes.toLocaleString()} lines</span>
+                <span style={{ fontSize: '0.6rem', color: '#aaa', textAlign: 'center' }}>{Number(sp.wordCount).toLocaleString()} words</span>
               </Link>
             ))}
           </div>

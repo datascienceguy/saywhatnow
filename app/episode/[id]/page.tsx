@@ -135,7 +135,7 @@ export default async function EpisodePage({ params }: Props) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem', fontSize: '0.8rem' }}>
                         <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toTitleCase(sp.name)}</span>
-                        <span style={{ color: '#888', flexShrink: 0, marginLeft: '0.5rem' }}>{pct}% ({sp.quotes} lines)</span>
+                        <span style={{ color: '#888', flexShrink: 0, marginLeft: '0.5rem' }}>{pct}% ({sp.words} words)</span>
                       </div>
                       <div style={{ background: '#f0f0f0', borderRadius: '3px', height: '6px', overflow: 'hidden' }}>
                         <div style={{ background: '#FED90F', height: '100%', width: `${pct}%`, borderRadius: '3px' }} />
