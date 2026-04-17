@@ -47,10 +47,13 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Guard against double import
-  const existing = await prisma.clip.findFirst({ where: { episodeId: episode.id } })
-  if (existing) {
-    return NextResponse.json({ error: `Episode S${season}E${episodeNumber} already has clips in this database` }, { status: 409 })
+  // Delete existing clips/quotes so re-finalization doesn't create duplicates
+  const existingClips = await prisma.clip.findMany({ where: { episodeId: episode.id }, select: { id: true } })
+  const existingClipIds = existingClips.map(c => c.id)
+  if (existingClipIds.length) {
+    await prisma.clipSpeaker.deleteMany({ where: { clipId: { in: existingClipIds } } })
+    await prisma.quote.deleteMany({ where: { clipId: { in: existingClipIds } } })
+    await prisma.clip.deleteMany({ where: { episodeId: episode.id } })
   }
 
   const speakerCache = new Map<string, number>()
