@@ -31,6 +31,7 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [finding, setFinding] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [status, setStatus] = useState('')
 
   async function save() {
@@ -199,6 +200,23 @@ export default function SpeakerEditForm({ speaker }: { speaker: Speaker }) {
           className="px-4 py-2 bg-yellow-400 text-gray-950 rounded text-sm font-semibold hover:bg-yellow-300 disabled:opacity-40 transition-colors"
         >
           {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          onClick={async () => {
+            if (!confirm(`Delete ${name}? Their quotes will become unattributed.`)) return
+            setDeleting(true)
+            const res = await fetch(`/api/admin/speakers/${speaker.id}`, { method: 'DELETE' })
+            if (res.ok) {
+              window.location.href = '/admin/speakers'
+            } else {
+              setDeleting(false)
+              setStatus('Delete failed.')
+            }
+          }}
+          disabled={deleting}
+          className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 rounded text-sm font-semibold text-white transition-colors"
+        >
+          {deleting ? 'Deleting…' : 'Delete'}
         </button>
         {status && <span className="text-xs text-gray-400">{status}</span>}
       </div>
