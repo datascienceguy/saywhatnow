@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["playwright", "beautifulsoup4"]
+# dependencies = ["playwright", "beautifulsoup4", "faster-whisper"]
 # ///
 """
 The Office episode import pipeline.
@@ -12,12 +12,14 @@ Usage:
 Steps (auto-skipped if output files already exist):
   1. Locate MKV from office_prep/Season {N}/
   2. Download transcript from foreverdreaming.org (f=574)
-  3. Extract embedded SRT from MKV
-  4. Convert MKV to full MP4
+  3. Convert MKV to full MP4
+  4. Transcribe audio with Whisper → precise timestamps (.whisper.json)
   5. Fetch episode metadata from tvmaze.com
   6. Parse transcript into quotes, using <hr> separators as clip boundaries
-  7. Match transcript to SRT timestamps
+  7. Match transcript to Whisper timestamps
   8. Create StagingEpisode in DB via API
+
+Pass --no-whisper to fall back to embedded SRT / tvsubtitles.net download.
 
 Output dir: clip_prep/office-s{NN}e{NN}/
 
@@ -35,7 +37,6 @@ import re
 import shutil
 import subprocess
 import sys
-from difflib import SequenceMatcher
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -190,9 +191,51 @@ def parse_srt(srt_path: str) -> list[dict]:
             continue
         start = to_sec(*m.groups()[:4])
         end = to_sec(*m.groups()[4:])
-        clean = re.sub(r"<[^>]+>", "", " ".join(lines[2:])).strip()
-        entries.append({"start": start, "end": end, "text": clean})
+        text_lines = [re.sub(r"<[^>]+>", "", l).strip() for l in lines[2:] if l.strip()]
+        # Multi-speaker blocks (lines starting with -): expand into separate entries
+        hyphen_lines = [l for l in text_lines if l.startswith("-")]
+        if len(hyphen_lines) >= 2:
+            for hl in hyphen_lines:
+                clean = hl.lstrip("- ").strip()
+                if clean:
+                    entries.append({"start": start, "end": end, "text": clean})
+        else:
+            clean = " ".join(l.lstrip("- ").strip() for l in text_lines)
+            if clean:
+                entries.append({"start": start, "end": end, "text": clean})
     return entries
+
+
+def combine_srt_sentences(srt: list[dict]) -> list[dict]:
+    """Combine consecutive SRT entries into complete sentences.
+
+    Entries are joined when the current text doesn't end with terminal
+    punctuation (. ? !) and the gap to the next entry is small.
+    Simultaneous entries (gap <= 0, e.g. from hyphen-split pairs) are
+    never joined.
+    """
+    TERMINAL = re.compile(r"[.?!]\s*$")
+    MAX_GAP = 1.5  # seconds
+
+    result = []
+    i = 0
+    while i < len(srt):
+        text = srt[i]["text"]
+        start = srt[i]["start"]
+        end = srt[i]["end"]
+
+        while not TERMINAL.search(text) and i + 1 < len(srt):
+            gap = srt[i + 1]["start"] - end
+            if gap <= 0 or gap > MAX_GAP:
+                break
+            i += 1
+            text = text.rstrip(" ,") + " " + srt[i]["text"]
+            end = srt[i]["end"]
+
+        result.append({"start": start, "end": end, "text": text})
+        i += 1
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -303,75 +346,165 @@ def parse_office_transcript(path: str) -> tuple[list[dict], list[int]]:
 # Transcript → SRT matching (same logic as Simpsons)
 # ---------------------------------------------------------------------------
 
-def _build_char_index(entries: list[dict]) -> tuple[str, list[int]]:
-    chars, positions = [], []
-    for idx, entry in enumerate(entries):
-        norm = normalize_text(entry["text"])
-        for ch in norm:
-            chars.append(ch)
-            positions.append(idx)
-        chars.append(" ")
-        positions.append(idx)
-    return "".join(chars), positions
-
-
-def _token_overlap(a: str, b: str) -> float:
-    wa = set(normalize_text(a).split())
-    wb = set(normalize_text(b).split())
-    if not wa:
-        return 0.0
-    return len(wa & wb) / len(wa)
-
-
 def match_transcript_to_srt(transcript: list[dict], srt: list[dict]) -> list[dict]:
-    t_str, t_pos = _build_char_index(transcript)
-    s_str, s_pos = _build_char_index(srt)
-    matcher = SequenceMatcher(None, t_str, s_str, autojunk=False)
+    """Match transcript entries to SRT timestamps.
 
-    assignments: dict[int, int] = {}
-    methods: dict[int, str] = {}
-    for i, j, n in matcher.get_matching_blocks():
-        if n < 12 or i >= len(t_pos) or j >= len(s_pos):
-            continue
-        t_idx = t_pos[i]
-        if t_idx not in assignments:
-            assignments[t_idx] = s_pos[j]
-            methods[t_idx] = "difflib"
-
+    Both sequences are in the same order. For each transcript entry we compute
+    a proportional anchor in the SRT and search a small window around it.
+    The SRT pointer only moves forward, guaranteeing monotonic timestamps.
+    Scoring is from the SRT side (fraction of SRT words found in the transcript
+    line) so long transcript lines correctly match short SRT entries.
+    On ties the earliest (first) SRT entry wins, giving the start of a speech.
+    """
     N, M = len(transcript), len(srt)
-    anchors = sorted([(-1, -1)] + list(assignments.items()) + [(N, M)])
-
-    def interpolated(t_idx: int) -> int:
-        prev_a, next_a = (-1, -1), (N, M)
-        for a in anchors:
-            if a[0] < t_idx: prev_a = a
-            elif a[0] > t_idx: next_a = a; break
-        t_span = next_a[0] - prev_a[0]
-        s_span = next_a[1] - prev_a[1]
-        if t_span <= 0 or s_span <= 0: return -1
-        frac = (t_idx - prev_a[0]) / t_span
-        return max(0, min(M - 1, round(prev_a[1] + frac * s_span)))
-
-    for t_idx in range(N):
-        if t_idx in assignments: continue
-        base = interpolated(t_idx)
-        if base < 0: continue
-        best_score, best_s = -1.0, base
-        for s_idx in range(max(0, base - 8), min(M - 1, base + 8) + 1):
-            score = _token_overlap(transcript[t_idx]["text"], srt[s_idx]["text"])
-            if score > best_score:
-                best_score, best_s = score, s_idx
-        assignments[t_idx] = best_s
-        methods[t_idx] = "fuzzy" if best_score >= 0.4 else "positional"
-
     results = []
+    s_ptr = 0  # never goes backward
+
     for t_idx, entry in enumerate(transcript):
-        if t_idx in assignments:
-            s = srt[assignments[t_idx]]
-            results.append({**entry, "start": s["start"], "end": s["end"], "match_method": methods.get(t_idx)})
-        else:
-            results.append({**entry, "start": None, "end": None, "match_method": None})
+        t_words = set(normalize_text(entry["text"]).split())
+
+        # Proportional anchor: where in the SRT should this transcript line fall?
+        anchor = round(t_idx / max(N - 1, 1) * max(M - 1, 1))
+        lo = max(s_ptr, anchor - 5)
+        hi = min(M - 1, max(anchor + 10, s_ptr + 5))
+
+        best_score = -1.0
+        best_s = min(M - 1, max(lo, anchor))  # default: anchor
+
+        for s in range(lo, hi + 1):
+            s_words = set(normalize_text(srt[s]["text"]).split())
+            score = len(t_words & s_words)  # raw word overlap count
+            if score > best_score:          # strict > keeps earliest best match
+                best_score, best_s = score, s
+
+        s_ptr = best_s
+        method = "fuzzy" if best_score >= 1 else "positional"
+        results.append({
+            **entry,
+            "start": srt[best_s]["start"],
+            "end": srt[best_s]["end"],
+            "match_method": method,
+        })
+
+    n_fuzzy = sum(1 for r in results if r.get("match_method") == "fuzzy")
+    n_pos   = sum(1 for r in results if r.get("match_method") == "positional")
+    print(f"  Matched: {n_fuzzy} fuzzy, {n_pos} positional")
     return results
+
+
+# ---------------------------------------------------------------------------
+# SRT download from subtitlecat.com
+# ---------------------------------------------------------------------------
+
+def download_srt_from_tvsubtitles(season: int, episode: int, output_path: Path) -> bool:
+    """Download English SRT from tvsubtitles.net (show ID 58 = The Office US)."""
+    import urllib.request
+    import zipfile
+    import io
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        print("  beautifulsoup4 not available")
+        return False
+
+    SHOW_ID = 58  # The Office (US) on tvsubtitles.net
+    BASE = "https://www.tvsubtitles.net"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    def fetch(url: str) -> str | None:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return r.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            print(f"  Request failed ({url}): {e}")
+            return None
+
+    # Step 1: season page → find episode link by position
+    season_url = f"{BASE}/tvshow-{SHOW_ID}-{season}.html"
+    print(f"\nFetching tvsubtitles.net season page: {season_url}")
+    html = fetch(season_url)
+    if not html:
+        return False
+
+    soup = BeautifulSoup(html, "html.parser")
+    ep_links = [
+        str(a["href"]) for a in soup.find_all("a", href=True)
+        if re.match(r"episode-\d+\.html$", str(a["href"]))
+        and not re.match(r"episode-\d+-\d+\.html$", str(a["href"]))
+    ]
+    ep_links.reverse()  # page lists episodes newest-first
+    if episode > len(ep_links):
+        print(f"  Only {len(ep_links)} episodes listed for season {season}")
+        return False
+
+    ep_url = f"{BASE}/{ep_links[episode - 1]}"
+
+    # Step 2: episode page → find English subtitle link
+    print(f"  Episode page: {ep_url}")
+    ep_html = fetch(ep_url)
+    if not ep_html:
+        return False
+
+    ep_soup = BeautifulSoup(ep_html, "html.parser")
+    en_sub_href: str | None = None
+    for a in ep_soup.find_all("a", href=True):
+        href = str(a["href"])
+        if not re.match(r"/subtitle-\d+\.html$", href):
+            continue
+        row_text = (a.find_parent() or a).get_text(separator=" ").lower()
+        if "english" in row_text or "en.png" in str(a.find_parent()):
+            en_sub_href = href
+            break
+    if not en_sub_href:
+        # fallback: first subtitle link
+        for a in ep_soup.find_all("a", href=True):
+            if re.match(r"/subtitle-\d+\.html$", str(a["href"])):
+                en_sub_href = str(a["href"])
+                break
+    if not en_sub_href:
+        print("  No subtitle links found on episode page")
+        return False
+
+    sub_id = re.search(r"\d+", en_sub_href).group()  # type: ignore[union-attr]
+
+    # Step 3: download page → reconstruct filename from obfuscated JS vars
+    dl_url = f"{BASE}/download-{sub_id}.html"
+    print(f"  Download page: {dl_url}")
+    dl_html = fetch(dl_url)
+    if not dl_html:
+        return False
+
+    parts = re.findall(r"var s(\d+)\s*=\s*'([^']*)'", dl_html)
+    if not parts:
+        print("  Could not parse download filename from JS")
+        return False
+    import urllib.parse
+    filename = "".join(v for _, v in sorted(parts, key=lambda x: int(x[0])))
+    zip_url = f"{BASE}/{urllib.parse.quote(filename)}"
+
+    # Step 4: download ZIP and extract SRT
+    print(f"  Downloading: {zip_url}")
+    try:
+        req = urllib.request.Request(zip_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            zip_data = r.read()
+    except Exception as e:
+        print(f"  ZIP download failed: {e}")
+        return False
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            srt_names = [n for n in zf.namelist() if n.lower().endswith(".srt")]
+            if not srt_names:
+                print("  No .srt file found in ZIP")
+                return False
+            output_path.write_bytes(zf.read(srt_names[0]))
+            print(f"  Saved: {output_path} (from {srt_names[0]})")
+            return True
+    except Exception as e:
+        print(f"  Failed to extract ZIP: {e}")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -542,18 +675,184 @@ def push_clips_to_staging(base_url: str, ep_id: int, clips: list[dict], secret: 
 
 
 # ---------------------------------------------------------------------------
+# Whisper transcription
+# ---------------------------------------------------------------------------
+
+def transcribe_words_with_whisper(mp4_path: str, output_dir: Path, basename: str, model: str = "base") -> list[dict]:
+    """Transcribe audio with faster-whisper using word-level timestamps.
+
+    Returns [{word, start, end}] for every spoken word.
+    Results are cached in <basename>.whisper-words.json.
+    """
+    cache_path = output_dir / f"{basename}.whisper-words.json"
+    if cache_path.exists():
+        print(f"\nWhisper word timestamps already exist: {cache_path}")
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        print(f"  {len(data)} words loaded from cache")
+        return data
+
+    print(f"\nTranscribing with Whisper (model={model}, word timestamps) — this may take a few minutes...")
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        print("  ERROR: faster-whisper not installed.")
+        return []
+
+    whisper_model = WhisperModel(model, device="cpu", compute_type="int8")
+    segments_iter, info = whisper_model.transcribe(
+        mp4_path, language="en", beam_size=5, word_timestamps=True
+    )
+
+    words = []
+    duration = info.duration
+    for seg in segments_iter:
+        for w in (seg.words or []):
+            words.append({"word": w.word.strip(), "start": round(w.start, 3), "end": round(w.end, 3)})
+        if words:
+            print(f"\r  {words[-1]['start']:6.1f}s / {duration:.0f}s  ({len(words)} words)", end="", flush=True)
+    print()
+
+    cache_path.write_text(json.dumps(words, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"  Saved: {cache_path} ({len(words)} words)")
+    return words
+
+
+def align_transcript_to_whisper(transcript: list[dict], words: list[dict]) -> list[dict]:
+    """Align transcript lines to Whisper word timestamps using global sequence alignment.
+
+    Flattens both sequences to word lists, runs SequenceMatcher to find the
+    longest common subsequence of words, maps matched words back to quote indices
+    to get start times, then interpolates timestamps for unmatched quotes.
+    """
+    from difflib import SequenceMatcher
+
+    # Flatten transcript to (normalized_word, quote_idx) pairs
+    t_flat: list[tuple[str, int]] = []
+    for q_idx, entry in enumerate(transcript):
+        for w in normalize_text(entry["text"]).split():
+            if w:
+                t_flat.append((w, q_idx))
+
+    if not t_flat or not words:
+        return [{**e, "start": None, "end": None, "match_method": None} for e in transcript]
+
+    t_words_only = [w for w, _ in t_flat]
+    w_words_norm = [normalize_text(w["word"]) for w in words]
+
+    # Global alignment: find matching blocks between transcript words and Whisper words
+    sm = SequenceMatcher(None, t_words_only, w_words_norm, autojunk=False)
+
+    # Build map: transcript flat word index → whisper word index
+    t_to_w: dict[int, int] = {}
+    for block in sm.get_matching_blocks():
+        for i in range(block.size):
+            t_to_w[block.a + i] = block.b + i
+
+    # For each quote, find the whisper word index of its first matched word
+    quote_w_idx: dict[int, int] = {}
+    for t_idx, (_, q_idx) in enumerate(t_flat):
+        if t_idx in t_to_w and q_idx not in quote_w_idx:
+            quote_w_idx[q_idx] = t_to_w[t_idx]
+
+    n_matched = len(quote_w_idx)
+    print(f"  Aligned: {n_matched}/{len(transcript)} quotes matched to Whisper words")
+
+    # Build results with matched timestamps
+    results: list[dict] = []
+    for q_idx, entry in enumerate(transcript):
+        if q_idx in quote_w_idx:
+            w_idx = quote_w_idx[q_idx]
+            results.append({**entry, "start": words[w_idx]["start"], "end": words[w_idx]["end"], "match_method": "aligned"})
+        else:
+            results.append({**entry, "start": None, "end": None, "match_method": "interpolated"})
+
+    # Interpolate missing timestamps between known anchors
+    idxs = sorted(quote_w_idx.keys())
+    for i, q_idx in enumerate(idxs):
+        prev_q = idxs[i - 1] if i > 0 else None
+        next_q = idxs[i + 1] if i < len(idxs) - 1 else None
+
+        # Fill gap before first anchor
+        if i == 0 and q_idx > 0:
+            t0 = results[q_idx]["start"]
+            for j in range(q_idx):
+                frac = j / q_idx
+                results[j]["start"] = round(t0 * frac, 3)
+                results[j]["end"] = round(t0 * frac, 3)
+
+        # Fill gap after last anchor
+        if i == len(idxs) - 1 and q_idx < len(results) - 1:
+            t_last = results[q_idx]["start"]
+            remaining = len(results) - q_idx - 1
+            last_word_time = words[-1]["end"]
+            for j in range(1, remaining + 1):
+                frac = j / (remaining + 1)
+                t = round(t_last + frac * (last_word_time - t_last), 3)
+                results[q_idx + j]["start"] = t
+                results[q_idx + j]["end"] = t
+
+        # Fill gap between two anchors
+        if next_q is not None:
+            t_a = results[q_idx]["start"]
+            t_b = results[next_q]["start"]
+            gap = next_q - q_idx
+            for j in range(1, gap):
+                frac = j / gap
+                t = round(t_a + frac * (t_b - t_a), 3)
+                results[q_idx + j]["start"] = t
+                results[q_idx + j]["end"] = t
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+def merge_short_clips(clips: list[dict], min_duration: float = 15.0) -> list[dict]:
+    """Merge any clip shorter than min_duration seconds into a neighboring clip."""
+    changed = True
+    while changed:
+        changed = False
+        for i, clip in enumerate(clips):
+            s, e = clip.get("startTime"), clip.get("endTime")
+            if s is None or e is None or (e - s) >= min_duration:
+                continue
+            # Pick neighbor: prefer the shorter one; fall back to whichever exists
+            if i == 0:
+                nb = 1
+            elif i == len(clips) - 1:
+                nb = i - 1
+            else:
+                pd = (clips[i-1].get("endTime", 0) - clips[i-1].get("startTime", 0))
+                nd = (clips[i+1].get("endTime", 0) - clips[i+1].get("startTime", 0))
+                nb = i - 1 if pd <= nd else i + 1
+            lo, hi = min(i, nb), max(i, nb)
+            ms = clips[lo].get("startTime") or clips[hi].get("startTime")
+            me = clips[hi].get("endTime") or clips[lo].get("endTime")
+            merged: dict = {"sequenceStart": clips[lo]["sequenceStart"], "sequenceEnd": clips[hi]["sequenceEnd"]}
+            if ms is not None: merged["startTime"] = ms
+            if me is not None: merged["endTime"] = me
+            clips = clips[:lo] + [merged] + clips[hi+1:]
+            print(f"  Merged short clip ({e-s:.1f}s) into neighbor → {len(clips)} clips remain")
+            changed = True
+            break  # restart scan after each merge
+
+    for i, clip in enumerate(clips):
+        clip["index"] = i + 1
+    return clips
+
 
 def main():
     parser = argparse.ArgumentParser(description="Process The Office episode into staging")
     parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--episode", type=int, required=True)
     parser.add_argument("--no-transcript", action="store_true", help="Skip transcript download")
-    parser.add_argument("--no-subtitles", action="store_true", help="Skip SRT extraction")
     parser.add_argument("--no-convert", action="store_true", help="Skip MP4 conversion")
     parser.add_argument("--regen-quotes", action="store_true", help="Regenerate quotes JSON")
-    parser.add_argument("--srt-offset", type=float, default=0.0, help="Seconds to add to all SRT timestamps (e.g. 22 if MP4 has a 22s intro not in the SRT)")
+    parser.add_argument("--no-whisper", action="store_true", help="Skip Whisper; fall back to embedded SRT / tvsubtitles.net")
+    parser.add_argument("--whisper-model", default="base", help="Whisper model size: tiny, base, small, medium, large-v3 (default: base)")
+    parser.add_argument("--srt-offset", type=float, default=0.0, help="Seconds to add to SRT timestamps (only used with --no-whisper)")
     args = parser.parse_args()
 
     season, episode, srt_offset = args.season, args.episode, args.srt_offset
@@ -577,16 +876,7 @@ def main():
     if not args.no_transcript:
         download_transcript(season, episode, transcript_path)
 
-    # Step 3: extract SRT
-    srt_path_str: str | None = None
-    srt_file = episode_dir / f"{basename}.srt"
-    if srt_file.exists():
-        print(f"SRT already exists: {srt_file}")
-        srt_path_str = str(srt_file)
-    elif not args.no_subtitles:
-        srt_path_str = extract_subtitles(str(mkv), episode_dir, basename)
-
-    # Step 4: convert to MP4
+    # Step 3: convert to MP4 (needed before Whisper)
     mp4_file = episode_dir / f"{basename}.mp4"
     if mp4_file.exists():
         print(f"\nMP4 already exists: {mp4_file}")
@@ -596,6 +886,32 @@ def main():
     if not mp4_file.exists():
         print("ERROR: MP4 not found — cannot create staging episode")
         sys.exit(1)
+
+    # Step 4: Whisper word timestamps (or fall back to SRT)
+    whisper_words: list[dict] = []
+    srt_entries: list[dict] = []  # only used in fallback path
+    if not args.no_whisper:
+        whisper_words = transcribe_words_with_whisper(str(mp4_file), episode_dir, basename, model=args.whisper_model)
+        if not whisper_words:
+            print("  WARNING: Whisper produced no words — falling back to SRT")
+    if not whisper_words:
+        # Fallback: embedded SRT or tvsubtitles.net
+        srt_path_str: str | None = None
+        srt_file = episode_dir / f"{basename}.srt"
+        if srt_file.exists():
+            print(f"SRT already exists: {srt_file}")
+            srt_path_str = str(srt_file)
+        else:
+            srt_path_str = extract_subtitles(str(mkv), episode_dir, basename)
+            if not srt_path_str:
+                if download_srt_from_tvsubtitles(season, episode, srt_file):
+                    srt_path_str = str(srt_file)
+        if srt_path_str:
+            raw = parse_srt(srt_path_str)
+            raw = [e for e in raw if e["start"] > 5]
+            srt_entries = combine_srt_sentences(raw)
+            if srt_offset:
+                srt_entries = [{**e, "start": e["start"] + srt_offset, "end": e["end"] + srt_offset} for e in srt_entries]
 
     # Step 5: episode metadata
     project_root = Path(__file__).resolve().parent.parent
@@ -618,20 +934,14 @@ def main():
         print(f"\n=== Generating quotes: {basename} ===")
         transcript_entries, scene_breaks = parse_office_transcript(str(transcript_path))
 
-        if srt_path_str:
-            srt = parse_srt(srt_path_str)
-            print(f"  SRT: {len(srt)} entries")
-            if srt_offset:
-                print(f"  Applying SRT offset: +{srt_offset}s")
-                srt = [{**e, "start": e["start"] + srt_offset, "end": e["end"] + srt_offset} for e in srt]
-            matched = match_transcript_to_srt(transcript_entries, srt)
-            n_difflib = sum(1 for m in matched if m.get("match_method") == "difflib")
-            n_fuzzy   = sum(1 for m in matched if m.get("match_method") == "fuzzy")
-            n_pos     = sum(1 for m in matched if m.get("match_method") == "positional")
-            n_none    = sum(1 for m in matched if m.get("match_method") is None)
-            print(f"  Matched: {n_difflib} difflib, {n_fuzzy} fuzzy, {n_pos} positional, {n_none} unmatched")
+        if whisper_words:
+            print(f"  Timing source: Whisper word timestamps ({len(whisper_words)} words)")
+            matched = align_transcript_to_whisper(transcript_entries, whisper_words)
+        elif srt_entries:
+            print(f"  Timing source: SRT ({len(srt_entries)} segments)")
+            matched = match_transcript_to_srt(transcript_entries, srt_entries)
         else:
-            print("  No SRT available — quotes will have no timestamps")
+            print("  No timing source available — quotes will have no timestamps")
             matched = [
                 {**e, "start": None, "end": None, "match_method": None}
                 for e in transcript_entries
@@ -734,6 +1044,8 @@ def main():
                 clip["endTime"] = round(end_time, 3)
 
             clips.append(clip)
+
+        clips = merge_short_clips(clips)
 
         print(f"\n=== Pushing {len(clips)} scene-based clip boundaries ===")
         has_timestamps = any(c.get("startTime") is not None for c in clips)

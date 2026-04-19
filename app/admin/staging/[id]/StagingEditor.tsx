@@ -92,6 +92,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
   const [finalizeLog, setFinalizeLog] = useState<string[]>([])
   const [error, setError] = useState('')
   const [activeQuoteId, setActiveQuoteId] = useState<number | null>(null)
+  const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(null)
   const [insertingAt, setInsertingAt] = useState<number | null>(null)
   const [newQuote, setNewQuote] = useState({ speaker: '', text: '' })
   const [dragQuoteId, setDragQuoteId] = useState<number | null>(null)
@@ -132,6 +133,47 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
     }, 2000)
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
   }, [splits, episodeEndTime])
+
+  const currentTimeRef = useRef(currentTime)
+  useEffect(() => { currentTimeRef.current = currentTime }, [currentTime])
+  const selectedQuoteIdRef = useRef(selectedQuoteId)
+  useEffect(() => { selectedQuoteIdRef.current = selectedQuoteId }, [selectedQuoteId])
+  const quotesRef = useRef(quotes)
+  useEffect(() => { quotesRef.current = quotes }, [quotes])
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+      const qs = quotesRef.current
+      const selId = selectedQuoteIdRef.current
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const idx = selId != null ? qs.findIndex(q => q.id === selId) : -1
+        const next = e.key === 'ArrowDown' ? Math.min(idx + 1, qs.length - 1) : Math.max(idx - 1, 0)
+        if (qs[next]) {
+          setSelectedQuoteId(qs[next].id)
+          quoteRefs.current.get(qs[next].id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      }
+      if (e.key === ' ') {
+        e.preventDefault()
+        const v = videoRef.current
+        if (v) v.paused ? v.play() : v.pause()
+      }
+      if (e.key === 's' || e.key === 'S') {
+        if (selId == null) return
+        const t = currentTimeRef.current
+        fetch(`/api/admin/staging/${episode.id}/quotes/${selId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ startTime: t }),
+        })
+        setQuotes(prev => prev.map(q => q.id === selId ? { ...q, startTime: t } : q))
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [episode.id])
 
   const seekTo = (time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time
@@ -326,7 +368,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0">
             <span className="text-xs text-gray-600 w-10 shrink-0">Nudge</span>
             <div className="flex gap-1">
-              {([-1, -0.1, 0.1, 1] as const).map(delta => (
+              {([-10, -5, -1, -0.1, 0.1, 1, 5, 10] as const).map(delta => (
                 <button
                   key={delta}
                   onClick={() => seekTo(Math.max(0, currentTime + delta))}
@@ -336,7 +378,8 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                 </button>
               ))}
             </div>
-            <span className="text-xs font-mono text-blue-400 ml-auto">{fmtTime(currentTime)}</span>
+            <span className="text-xs text-gray-700 ml-auto mr-2">↑↓ select · S stamp</span>
+            <span className="text-xs font-mono text-blue-400">{fmtTime(currentTime)}</span>
           </div>
 
           {/* Clip timeline */}
@@ -420,6 +463,8 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
                 <QuoteRow
                   quote={q}
                   active={activeQuoteId === q.id}
+                  selected={selectedQuoteId === q.id}
+                  onSelect={() => setSelectedQuoteId(q.id)}
                   currentTime={currentTime}
                   editingQuoteId={editingQuoteId}
                   speakers={speakers}
@@ -611,11 +656,11 @@ function InlineDivider({
 }
 
 function QuoteRow({
-  quote, active, currentTime, editingQuoteId, speakers, isDragging, isDragOver,
+  quote, active, selected, onSelect, currentTime, editingQuoteId, speakers, isDragging, isDragOver,
   onSeek, onStartEdit, onSaveEdit, onCancelEdit, onDelete, onSplit, onStampTime,
   onDragStart, onDragOver, onDragEnd,
 }: {
-  quote: Quote; active: boolean; currentTime: number
+  quote: Quote; active: boolean; selected: boolean; onSelect: () => void; currentTime: number
   editingQuoteId: { id: number; focusField?: 'speaker' | 'text' } | null
   speakers: { id: number; name: string }[]
   isDragging: boolean; isDragOver: boolean
@@ -670,10 +715,11 @@ function QuoteRow({
       onDragStart={onDragStart}
       onDragOver={e => { e.preventDefault(); onDragOver() }}
       onDragEnd={onDragEnd}
-      className={`flex items-start gap-2 px-2 py-1.5 rounded text-sm group transition-colors cursor-default
+      onClick={onSelect}
+      className={`flex items-start gap-2 px-2 py-0.5 rounded text-sm group transition-colors cursor-default
         ${isDragging ? 'opacity-40' : ''}
         ${isDragOver ? 'border-t-2 border-blue-400' : 'border-t-2 border-transparent'}
-        ${active ? 'bg-yellow-950 border-l-2 border-yellow-500' : 'hover:bg-gray-900'}`}
+        ${active ? 'bg-yellow-950 border-l-2 border-yellow-500' : selected ? 'bg-blue-950 border-l-2 border-blue-500' : 'hover:bg-gray-900 border-l-2 border-transparent'}`}
     >
       {/* Drag handle */}
       <div className="text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity select-none" title="Drag to reorder">⠿</div>
