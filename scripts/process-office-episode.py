@@ -660,6 +660,50 @@ def create_staging_episode(
     return ep_id
 
 
+def auto_map_speakers(base_url: str, ep_id: int, secret: str) -> None:
+    """Fetch speaker-map suggestions and auto-apply high-confidence matches."""
+    import urllib.request
+    headers = {"x-internal-secret": secret}
+
+    req = urllib.request.Request(
+        f"{base_url}/api/admin/staging/{ep_id}/speaker-map",
+        headers=headers,
+    )
+    try:
+        with urllib.request.urlopen(req) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"  WARNING: Could not fetch speaker map: {e}")
+        return
+
+    mappings = data.get("mappings", [])
+    auto = {m["stagingName"]: m["suggestedName"]
+            for m in mappings
+            if m.get("suggestedName") and m.get("suggestedScore", 0) >= 0.5}
+    unresolved = [m["stagingName"] for m in mappings if m["stagingName"] not in auto]
+
+    if auto:
+        payload = json.dumps({"mapping": auto}).encode()
+        req2 = urllib.request.Request(
+            f"{base_url}/api/admin/staging/{ep_id}/speaker-map",
+            data=payload,
+            headers={**headers, "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req2) as r:
+            json.loads(r.read())
+        print(f"  Auto-mapped {len(auto)} speaker(s):")
+        for old, new in auto.items():
+            print(f"    {old} → {new}")
+    else:
+        print("  No high-confidence speaker matches found")
+
+    if unresolved:
+        print(f"  ⚠ {len(unresolved)} speaker(s) need manual mapping: {', '.join(unresolved)}")
+    else:
+        print("  ✓ All speakers mapped")
+
+
 def push_clips_to_staging(base_url: str, ep_id: int, clips: list[dict], secret: str) -> None:
     import urllib.request
     payload = json.dumps({"clips": clips}).encode()
@@ -809,7 +853,59 @@ def align_transcript_to_whisper(transcript: list[dict], words: list[dict]) -> li
 # Main
 # ---------------------------------------------------------------------------
 
-def merge_short_clips(clips: list[dict], min_duration: float = 15.0) -> list[dict]:
+def split_long_clips(clips: list[dict], all_quotes: list[dict], max_duration: float = 110.0) -> list[dict]:
+    """Split any clip longer than max_duration at the largest natural gap near the midpoint."""
+    changed = True
+    while changed:
+        changed = False
+        for i, clip in enumerate(clips):
+            st = clip.get("startTime") or 0
+            et = clip.get("endTime") or 0
+            if (et - st) <= max_duration:
+                continue
+
+            seq_start = clip["sequenceStart"]
+            seq_end = clip["sequenceEnd"]
+            clip_quotes = sorted(
+                [q for q in all_quotes if seq_start <= q["sequence"] <= seq_end and q.get("startTime") is not None],
+                key=lambda q: q["startTime"],
+            )
+            if len(clip_quotes) < 2:
+                continue
+
+            mid = st + (et - st) / 2
+
+            # Prefer a quote near the midpoint that follows a gap of at least 1s
+            best_q = None
+            best_diff = float("inf")
+            for j in range(1, len(clip_quotes)):
+                gap = clip_quotes[j]["startTime"] - clip_quotes[j - 1]["startTime"]
+                if gap < 1.0:
+                    continue
+                diff = abs(clip_quotes[j]["startTime"] - mid)
+                if diff < best_diff:
+                    best_diff, best_q = diff, clip_quotes[j]
+
+            # Fallback: split at the middle quote if no natural gap found
+            if not best_q:
+                best_q = clip_quotes[len(clip_quotes) // 2]
+
+            split_time = best_q["startTime"]
+            split_seq = best_q["sequence"]
+            c1 = {**clip, "sequenceEnd": split_seq - 1, "endTime": round(split_time, 3)}
+            c2 = {"sequenceStart": split_seq, "sequenceEnd": clip["sequenceEnd"],
+                  "startTime": round(split_time, 3), "endTime": clip.get("endTime")}
+            clips = clips[:i] + [c1, c2] + clips[i + 1:]
+            print(f"  Split long clip ({et-st:.0f}s) at {split_time:.1f}s → {split_time-st:.0f}s + {et-split_time:.0f}s")
+            changed = True
+            break
+
+    for i, c in enumerate(clips):
+        c["index"] = i + 1
+    return clips
+
+
+def merge_short_clips(clips: list[dict], min_duration: float = 20.0) -> list[dict]:
     """Merge any clip shorter than min_duration seconds into a neighboring clip."""
     changed = True
     while changed:
@@ -1045,13 +1141,17 @@ def main():
 
             clips.append(clip)
 
-        clips = merge_short_clips(clips)
+        clips = split_long_clips(clips, all_quotes, max_duration=110.0)
+        clips = merge_short_clips(clips, min_duration=20.0)
 
         print(f"\n=== Pushing {len(clips)} scene-based clip boundaries ===")
         has_timestamps = any(c.get("startTime") is not None for c in clips)
         if not has_timestamps:
             print("  (no timestamps — clip times will need to be set in the staging editor)")
         push_clips_to_staging(base_url, ep_id, clips, secret)
+
+    print(f"\n=== Auto-mapping speakers ===")
+    auto_map_speakers(base_url, ep_id, secret)
 
     print(f"\n✓ Done! Review at /admin/staging/{ep_id}")
 

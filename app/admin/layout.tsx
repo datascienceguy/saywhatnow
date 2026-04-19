@@ -22,8 +22,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-950 text-gray-100 flex">
       {/* Sidebar */}
       <aside className="w-48 shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="px-4 py-4 border-b border-gray-800">
+        <div className="px-4 py-4 border-b border-gray-800 flex items-center justify-between">
           <span className="font-bold text-yellow-400 tracking-wide text-sm">SWN Admin</span>
+          <Link href="/" className="text-xs text-gray-500 hover:text-white transition-colors">← Site</Link>
         </div>
         <nav className="flex-1 px-2 py-4 space-y-4">
           <div>
@@ -39,11 +40,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {navItem('/admin/users', 'Users')}
           </div>
         </nav>
-        <div className="px-2 py-4 border-t border-gray-800">
-          <Link href="/" className="block px-3 py-1.5 rounded text-sm text-gray-500 hover:text-white hover:bg-gray-800 transition-colors">
-            ← Back to site
-          </Link>
-        </div>
       </aside>
 
       {/* Main */}

@@ -23,10 +23,15 @@ function score(stagingName: string, dbName: string, quoteCount: number, maxQuote
   return sim * 0.6 + popularity * 0.4
 }
 
+function isAuthed(req: NextRequest, session: Awaited<ReturnType<typeof auth>>) {
+  if (req.headers.get('x-internal-secret') === process.env.INTERNAL_API_SECRET) return true
+  return (session?.user as { role?: string })?.role === 'ADMIN'
+}
+
 // GET — returns unique staging speaker names + best DB match for each
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if ((session?.user as { role?: string })?.role !== 'ADMIN') {
+  if (!isAuthed(req, session)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -57,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       ...s,
       score: score(stagingName, s.name, s._count.quotes, maxQuotes),
     }))
-    scored.sort((a, b) => b.score - a.score)
+    scored.sort((a, b) => b.score - a.score || b._count.quotes - a._count.quotes)
     const best = scored[0]
     return {
       stagingName,
@@ -72,7 +77,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // POST — bulk-update staging quote speaker names using provided mapping
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if ((session?.user as { role?: string })?.role !== 'ADMIN') {
+  if (!isAuthed(req, session)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

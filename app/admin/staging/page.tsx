@@ -31,7 +31,7 @@ export default async function StagingIndexPage() {
         {draft.length === 0 ? (
           <p className="text-gray-500 text-sm">No drafts.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2" suppressHydrationWarning>
             {draft.map(ep => (
               <Link
                 key={ep.id}
@@ -60,7 +60,7 @@ export default async function StagingIndexPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">
             Completed ({complete.length})
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-2" suppressHydrationWarning>
             {complete.map(ep => (
               <div
                 key={ep.id}

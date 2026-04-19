@@ -85,6 +85,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
   const [editingQuoteId, setEditingQuoteId] = useState<{ id: number; focusField?: 'speaker' | 'text' } | null>(null)
   const [speakers, setSpeakers] = useState<{ id: number; name: string }[]>([])
   const [showSpeakerMap, setShowSpeakerMap] = useState(false)
+  const [unresolvedSpeakers, setUnresolvedSpeakers] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -107,6 +108,14 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
   useEffect(() => {
     fetch(`/api/admin/staging/${episode.id}/speakers`)
       .then(r => r.json()).then(setSpeakers).catch(() => {})
+    fetch(`/api/admin/staging/${episode.id}/speaker-map`)
+      .then(r => r.json())
+      .then(data => {
+        const unresolved = (data.mappings ?? [])
+          .filter((m: { suggestedScore: number }) => m.suggestedScore < 0.5)
+          .map((m: { stagingName: string }) => m.stagingName)
+        setUnresolvedSpeakers(unresolved)
+      }).catch(() => {})
   }, [episode.id])
 
   useEffect(() => {
@@ -316,6 +325,8 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-2.5 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
+          <a href="/admin/staging" className="text-gray-600 hover:text-gray-300 text-xs shrink-0 transition-colors">← Admin</a>
+          <span className="text-gray-700">·</span>
           <span className="font-semibold text-white truncate">{episode.title}</span>
           <span className="text-gray-600">·</span>
           <span className="text-gray-400 text-sm shrink-0">
@@ -335,8 +346,13 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
 
           {/* Secondary actions */}
           <div className="flex items-center gap-1 border-r border-gray-700 pr-2 mr-1">
-            <button onClick={() => setShowSpeakerMap(true)} className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors">
+            <button onClick={() => setShowSpeakerMap(true)} className="relative px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors">
               Map Speakers
+              {unresolvedSpeakers.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 text-gray-950 rounded-full text-xs font-bold flex items-center justify-center leading-none">
+                  {unresolvedSpeakers.length}
+                </span>
+              )}
             </button>
             <button onClick={reset} className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-400 hover:text-red-400 transition-colors">
               Reset
@@ -574,6 +590,7 @@ export default function StagingEditor({ episode }: { episode: Episode }) {
           onClose={() => setShowSpeakerMap(false)}
           onApplied={mapping => {
             setQuotes(prev => prev.map(q => ({ ...q, speaker: mapping[q.speaker] ?? q.speaker })))
+            setUnresolvedSpeakers([])
           }}
         />
       )}
