@@ -40,10 +40,22 @@ export default async function ShowPage({ params }: Props) {
     orderBy: [{ season: 'asc' }, { episodeNumber: 'asc' }],
   })
 
-  type SeasonRow = { season: number; episodeCount: number; clipCount: number; quoteCount: number }
+  // Word counts per season via raw SQL
+  const seasonWords = await prisma.$queryRaw<Array<{ season: number; wordCount: bigint }>>`
+    SELECT e.season,
+      SUM(length(trim(q.text)) - length(replace(trim(q.text), ' ', '')) + 1) as wordCount
+    FROM Quote q
+    JOIN Episode e ON q.episodeId = e.id
+    WHERE e.showId = ${showId}
+    GROUP BY e.season
+  `
+  const seasonWordMap = new Map(seasonWords.map(r => [r.season, Number(r.wordCount)]))
+  const totalWords = seasonWords.reduce((n, r) => n + Number(r.wordCount), 0)
+
+  type SeasonRow = { season: number; episodeCount: number; clipCount: number; quoteCount: number; wordCount: number }
   const seasonMap = new Map<number, SeasonRow>()
   for (const ep of episodes) {
-    const row = seasonMap.get(ep.season) ?? { season: ep.season, episodeCount: 0, clipCount: 0, quoteCount: 0 }
+    const row = seasonMap.get(ep.season) ?? { season: ep.season, episodeCount: 0, clipCount: 0, quoteCount: 0, wordCount: seasonWordMap.get(ep.season) ?? 0 }
     row.episodeCount++
     row.clipCount += ep._count.clips
     row.quoteCount += ep._count.quotes
@@ -100,6 +112,7 @@ export default async function ShowPage({ params }: Props) {
           {statCard('Episodes', episodeCount.toLocaleString())}
           {statCard('Clips', clipCount.toLocaleString())}
           {statCard('Quotes', quoteCount.toLocaleString())}
+          {statCard('Words', totalWords.toLocaleString())}
           {statCard('Speakers', speakerCount.toLocaleString())}
           {statCard('Runtime', `${runtimeHours}h ${runtimeMins}m`)}
         </div>
@@ -116,6 +129,7 @@ export default async function ShowPage({ params }: Props) {
                 <th style={{ textAlign: 'right', fontWeight: 600, color: '#555' }}>Episodes</th>
                 <th style={{ textAlign: 'right', fontWeight: 600, color: '#555' }}>Clips</th>
                 <th style={{ textAlign: 'right', fontWeight: 600, color: '#555' }}>Quotes</th>
+                <th style={{ textAlign: 'right', fontWeight: 600, color: '#555' }}>Words</th>
               </tr>
             </thead>
             <tbody>
@@ -129,6 +143,7 @@ export default async function ShowPage({ params }: Props) {
                   <td style={{ textAlign: 'right', color: '#555' }}>{row.episodeCount}</td>
                   <td style={{ textAlign: 'right', color: '#555' }}>{row.clipCount.toLocaleString()}</td>
                   <td style={{ textAlign: 'right', color: '#555' }}>{row.quoteCount.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right', color: '#555' }}>{row.wordCount.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
