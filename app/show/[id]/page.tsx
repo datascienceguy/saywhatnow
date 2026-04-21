@@ -8,6 +8,7 @@ import { auth } from '@/auth'
 import { toTitleCase } from '@/lib/display'
 import nextDynamic from 'next/dynamic'
 const SpeakerDonut = nextDynamic(() => import('@/app/components/SpeakerDonut'))
+const SpeakerTrendChart = nextDynamic(() => import('@/app/components/SpeakerTrendChart'))
 
 interface Props {
   params: Promise<{ id: string }>
@@ -80,6 +81,30 @@ export default async function ShowPage({ params }: Props) {
     LIMIT 16
   `
   const totalSpeakerWords = topSpeakers.reduce((n, sp) => n + Number(sp.wordCount), 0)
+
+  // Per-speaker per-season word counts for trend chart (top 8 speakers only)
+  const allSpeakerIds = topSpeakers.map(sp => sp.id)
+  const trendData = allSpeakerIds.length > 0
+    ? await prisma.$queryRawUnsafe<Array<{ season: number; speakerId: number; words: bigint }>>(
+        `SELECT e.season, q.speakerId,
+          SUM(length(trim(q.text)) - length(replace(trim(q.text), ' ', '')) + 1) as words
+        FROM Quote q
+        JOIN Episode e ON q.episodeId = e.id
+        WHERE e.showId = ? AND q.speakerId IN (${allSpeakerIds.map(() => '?').join(',')})
+        GROUP BY e.season, q.speakerId`,
+        showId, ...allSpeakerIds
+      )
+    : []
+  const trendDataMapped = trendData.map(r => ({ season: r.season, speakerId: r.speakerId, words: Number(r.words) }))
+
+  // Only show speakers with >= 1% word share in at least one season
+  const trendSpeakers = topSpeakers.filter(sp =>
+    trendDataMapped.some(r => {
+      if (r.speakerId !== sp.id) return false
+      const total = seasonWordMap.get(r.season) ?? 1
+      return (r.words / total) >= 0.01
+    })
+  )
 
   const statCard = (label: string, value: string | number, sub?: string) => (
     <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '2px 2px 0 #1a1a1a', textAlign: 'center' }}>
@@ -183,6 +208,20 @@ export default async function ShowPage({ params }: Props) {
             ))}
           </div>
         </div>
+
+        {/* Speaker trend chart */}
+        {seasons.length > 1 && trendSpeakers.length > 0 && (
+          <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', padding: '1rem', boxShadow: '3px 3px 0 #1a1a1a' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+              Speaker Share by Season
+            </div>
+            <SpeakerTrendChart
+              seasons={seasons.map(s => s.season)}
+              speakers={trendSpeakers.map(sp => ({ id: sp.id, name: sp.name }))}
+              data={trendDataMapped}
+            />
+          </div>
+        )}
 
         {/* Episode list */}
         <div style={{ background: 'white', border: '2px solid #1a1a1a', borderRadius: '8px', overflow: 'hidden', boxShadow: '3px 3px 0 #1a1a1a' }}>

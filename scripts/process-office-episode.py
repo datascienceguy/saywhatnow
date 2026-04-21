@@ -41,6 +41,16 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+import builtins, datetime
+_orig_print = builtins.print
+def print(*args, **kwargs):
+    if args and isinstance(args[0], str) and not args[0].startswith("\r"):
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        _orig_print(f"[{ts}]", *args, **kwargs)
+    else:
+        _orig_print(*args, **kwargs)
+builtins.print = print
+
 OFFICE_PREP_DIR = Path("office_prep")
 FORUM_URL = "https://transcripts.foreverdreaming.org/viewforum.php?f=574&sk=t&sd=a"
 SHOW_NAME = "The Office"
