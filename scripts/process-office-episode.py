@@ -915,7 +915,7 @@ def split_long_clips(clips: list[dict], all_quotes: list[dict], max_duration: fl
     return clips
 
 
-def merge_short_clips(clips: list[dict], min_duration: float = 20.0) -> list[dict]:
+def merge_short_clips(clips: list[dict], min_duration: float = 15.0) -> list[dict]:
     """Merge any clip shorter than min_duration seconds into a neighboring clip."""
     changed = True
     while changed:
@@ -1152,7 +1152,7 @@ def main():
             clips.append(clip)
 
         clips = split_long_clips(clips, all_quotes, max_duration=110.0)
-        clips = merge_short_clips(clips, min_duration=20.0)
+        clips = merge_short_clips(clips, min_duration=15.0)
 
         print(f"\n=== Pushing {len(clips)} scene-based clip boundaries ===")
         has_timestamps = any(c.get("startTime") is not None for c in clips)
