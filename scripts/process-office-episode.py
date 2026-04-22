@@ -1154,6 +1154,21 @@ def main():
         clips = split_long_clips(clips, all_quotes, max_duration=110.0)
         clips = merge_short_clips(clips, min_duration=15.0)
 
+        # Always start from second 0
+        if clips:
+            clips[0]["startTime"] = 0.0
+
+        # Trim cold open if a large gap to clip[1] indicates a theme song
+        if len(clips) >= 2 and clips[0].get("endTime") and clips[1].get("startTime"):
+            gap = clips[1]["startTime"] - clips[0]["endTime"]
+            if gap > 20:
+                for j in range(clips[0]["sequenceEnd"], clips[0]["sequenceStart"] - 1, -1):
+                    q = all_quotes[j]
+                    if q.get("matchMethod") == "aligned" and q.get("endTime") is not None:
+                        clips[0]["endTime"] = round(q["endTime"] + 1.0, 3)
+                        print(f"  Cold open trimmed to {clips[0]['endTime']}s (theme song gap ~{gap:.0f}s detected)")
+                        break
+
         print(f"\n=== Pushing {len(clips)} scene-based clip boundaries ===")
         has_timestamps = any(c.get("startTime") is not None for c in clips)
         if not has_timestamps:
