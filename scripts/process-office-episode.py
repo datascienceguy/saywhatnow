@@ -1116,11 +1116,11 @@ def main():
     except Exception:
         ep_id = create_staging_episode(project_root, basename, season, episode, title.upper(), ep_meta["air_date"])
 
-    # Step 8: push scene-based clip boundaries
-    if scene_breaks:
-        quotes_data = json.loads(quotes_path.read_text(encoding="utf-8"))
-        all_quotes = quotes_data["quotes"]
+    # Step 8: push clip boundaries (scene-based if breaks exist, else single clip)
+    quotes_data = json.loads(quotes_path.read_text(encoding="utf-8"))
+    all_quotes = quotes_data["quotes"]
 
+    if True:
         # Build clip list from scene breaks using sequence-based assignment
         clips = []
         boundaries = [0] + scene_breaks + [len(all_quotes)]
@@ -1158,16 +1158,24 @@ def main():
         if clips:
             clips[0]["startTime"] = 0.0
 
-        # Trim cold open if a large gap to clip[1] indicates a theme song
-        if len(clips) >= 2 and clips[0].get("endTime") and clips[1].get("startTime"):
-            gap = clips[1]["startTime"] - clips[0]["endTime"]
-            if gap > 20:
-                for j in range(clips[0]["sequenceEnd"], clips[0]["sequenceStart"] - 1, -1):
-                    q = all_quotes[j]
-                    if q.get("matchMethod") == "aligned" and q.get("endTime") is not None:
-                        clips[0]["endTime"] = round(q["endTime"] + 1.0, 3)
-                        print(f"  Cold open trimmed to {clips[0]['endTime']}s (theme song gap ~{gap:.0f}s detected)")
-                        break
+        # Trim cold open if aligned Whisper timestamps show a large gap (theme song)
+        if len(clips) >= 2:
+            last_aligned_end = next(
+                (all_quotes[j]["endTime"] for j in range(clips[0]["sequenceEnd"], clips[0]["sequenceStart"] - 1, -1)
+                 if all_quotes[j].get("matchMethod") == "aligned" and all_quotes[j].get("endTime") is not None),
+                None
+            )
+            first_aligned_start = next(
+                (all_quotes[j]["startTime"] for j in range(clips[1]["sequenceStart"], clips[1]["sequenceEnd"] + 1)
+                 if all_quotes[j].get("matchMethod") == "aligned" and all_quotes[j].get("startTime") is not None),
+                None
+            )
+            if last_aligned_end and first_aligned_start:
+                gap = first_aligned_start - last_aligned_end
+                print(f"  Cold open: last aligned word ends at {last_aligned_end:.1f}s, next scene starts at {first_aligned_start:.1f}s (gap {gap:.1f}s)")
+                if gap > 15:
+                    clips[0]["endTime"] = round(last_aligned_end + 1.0, 3)
+                    print(f"  Cold open trimmed to {clips[0]['endTime']}s (theme song gap detected)")
 
         print(f"\n=== Pushing {len(clips)} scene-based clip boundaries ===")
         has_timestamps = any(c.get("startTime") is not None for c in clips)
