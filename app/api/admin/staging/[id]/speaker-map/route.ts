@@ -23,9 +23,10 @@ function score(stagingName: string, dbName: string, quoteCount: number, maxQuote
   return sim * 0.6 + popularity * 0.4
 }
 
-function isAuthed(req: NextRequest, session: Awaited<ReturnType<typeof auth>>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isAuthed(req: NextRequest, session: any) {
   if (req.headers.get('x-internal-secret') === process.env.INTERNAL_API_SECRET) return true
-  return (session?.user as { role?: string })?.role === 'ADMIN'
+  return (session?.user as { role?: string } | undefined)?.role === 'ADMIN'
 }
 
 // GET — returns unique staging speaker names + best DB match for each
